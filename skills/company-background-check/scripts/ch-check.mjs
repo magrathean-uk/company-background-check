@@ -17,6 +17,18 @@ const GPG_BASE = process.env.GPG_BASE || 'https://gender-pay-gap.service.gov.uk'
 const GOVUK_BASE = process.env.GOVUK_BASE || 'https://www.gov.uk', GOVUK_SITE = 'https://www.gov.uk';
 const SPONSOR_REGISTER_PAGE = '/government/publications/register-of-licensed-sponsors-workers', TRIBUNAL_LOOKBACK_MONTHS = 72, MAX_FAILED_COMPANY_TRIBUNAL_SEARCHES = 10;
 const MAX_PARENT_LEVELS = 3;
+// A PSC can hold only 25-50% or exercise influence without being a parent. Use explicit
+// majority rights for inferred parent/group links; trust/firm influence needs manual review.
+// Enum meanings: https://github.com/companieshouse/api-enumerations/blob/master/psc_descriptions.yml
+const PARENT_CONTROLS = new Set([
+  'ownership-of-shares-50-to-75-percent', 'ownership-of-shares-75-to-100-percent',
+  'voting-rights-50-to-75-percent', 'voting-rights-75-to-100-percent', 'right-to-appoint-and-remove-directors',
+  'voting-rights-50-to-75-percent-limited-liability-partnership', 'voting-rights-75-to-100-percent-limited-liability-partnership',
+  'right-to-appoint-and-remove-members-limited-liability-partnership',
+]);
+const isOrganisationPsc = p => /^(corporate-entity|legal-person)-person-with-significant-control$/.test(p.kind || '');
+const parentControlGap = p => p.ceased_on ? `PSC ceased on ${p.ceased_on}`
+  : (p.natures_of_control || []).some(control => PARENT_CONTROLS.has(control)) ? null : 'PSC record does not establish majority control';
 const PPR_BASE = process.env.PPR_BASE || 'https://check-payment-practices.service.gov.uk', PPR_SITE = 'https://check-payment-practices.service.gov.uk';
 const CASELAW_BASE = process.env.CASELAW_BASE || 'https://caselaw.nationalarchives.gov.uk', COURT_LOOKBACK_MONTHS = 72;
 // off-payroll (IR35) small company limits from 6 April 2026: a company is small when it meets two of the three
@@ -476,10 +488,12 @@ const parents = [], parentsNotFollowed = [], seenInGroup = new Set([number]);
 const parentQueue = [{ items: psc?.items, level: 1, ownerOf: c.company_name }];
 while (parentQueue.length) {
   const { items, level, ownerOf } = parentQueue.shift();
-  for (const owner of (items || []).filter(p => !p.ceased_on && (p.kind || '').startsWith('corporate-entity'))) {
+  for (const owner of (items || []).filter(isOrganisationPsc)) {
     const ident = owner.identification || {}, register = ident.country_registered || ident.place_registered || ident.legal_authority;
     let parentNumber = companyNumberKey(ident.registration_number), matchedBy;
     const notFollowed = reason => parentsNotFollowed.push({ name: owner.name, owner_of: ownerOf, reason });
+    const controlGap = parentControlGap(owner);
+    if (controlGap) { notFollowed(controlGap); continue; }
     if (!UK_REGISTER.test(register || '')) { notFollowed(register ? `registered in ${register}` : 'register not stated'); continue; }
     // UK owners are often recorded without a number. Live UK companies can't share a name, so an exact match is the owner.
     if (!parentNumber) {
@@ -491,9 +505,9 @@ while (parentQueue.length) {
     if (!/^([A-Z]{2}\d{6}|\d{8})$/.test(parentNumber)) { notFollowed('no UK company number given'); continue; }
     if (seenInGroup.has(parentNumber)) continue;
     if (level > MAX_PARENT_LEVELS) { notFollowed(`more than ${MAX_PARENT_LEVELS} levels up`); continue; }
-    seenInGroup.add(parentNumber);
     const parent = await get(`/company/${parentNumber}`);
     if (!parent) { notFollowed(`no Companies House record for ${parentNumber}`); continue; }
+    seenInGroup.add(parentNumber);
     const [parentPsc, parentInsolvency, parentFilings] = await Promise.all([
       get(`/company/${parentNumber}/persons-with-significant-control?items_per_page=50`),
       get(`/company/${parentNumber}/insolvency`),
@@ -609,20 +623,28 @@ if (!activeDirs.length) flag('high', 'no_directors', 'No active directors on rec
 
 // A company in the target's own group closing (a subsidiary, or a sister under the same parent) is group housekeeping,
 // not a company cycled out from under its staff
-const groupOwnership = new Map();
+const groupOwnership = new Map(), groupOwnershipNotFollowed = new Map();
 async function inTargetGroup(num, depth = 0) {
   if (seenInGroup.has(num)) return true;
-  if (depth >= MAX_PARENT_LEVELS || groupOwnership.has(num)) return groupOwnership.get(num) ?? false;
+  if (depth >= MAX_PARENT_LEVELS) return false;
+  // A depth-limited miss on one route must not hide a shorter, confirmed route later.
+  const cacheKey = `${num}:${depth}`;
+  if (groupOwnership.has(cacheKey)) return groupOwnership.get(cacheKey);
   const owners = (await get(`/company/${num}/persons-with-significant-control?items_per_page=50`))?.items || [];
   let owned = false;
   for (const owner of owners) {
-    if (!owner.name || (owner.kind || '').startsWith('individual')) continue;
+    if (!owner.name || !isOrganisationPsc(owner)) continue;
+    const controlGap = parentControlGap(owner);
+    if (controlGap) {
+      groupOwnershipNotFollowed.set(`${num}:${owner.name}:${controlGap}`, { name: owner.name, owner_of: num, reason: controlGap });
+      continue;
+    }
     // Subsidiaries often record their owner by name only, and that owner may be dissolved by now too
     const ownerNumber = companyNumberKey(owner.identification?.registration_number)
       || [(await searchCompanies(owner.name)).filter(i => bareName(i.title) === bareName(owner.name))].find(m => m.length === 1)?.[0].company_number;
     if (ownerNumber && await inTargetGroup(ownerNumber, depth + 1)) { owned = true; break; }
   }
-  groupOwnership.set(num, owned);
+  groupOwnership.set(cacheKey, owned);
   return owned;
 }
 
@@ -811,7 +833,7 @@ console.log(JSON.stringify({
     active_directors: activeDirs.length, resigned_last_12_months: recentResignations.length, url: `${SITE}/company/${number}`,
   },
   directors, pscs, flags,
-  meta: { requests, directors_not_checked: Math.max(0, activeDirs.length - MAX_DIRECTORS), people_without_officer_record: people.filter(p => !p.paths.length).map(p => p.name), company_lookups_skipped: skippedLookups, gazette_name_only: gazette.name_only, parents_not_followed: parentsNotFollowed, failed_company_tribunals: failedCompanyTribunals,
+  meta: { requests, directors_not_checked: Math.max(0, activeDirs.length - MAX_DIRECTORS), people_without_officer_record: people.filter(p => !p.paths.length).map(p => p.name), company_lookups_skipped: skippedLookups, gazette_name_only: gazette.name_only, parents_not_followed: parentsNotFollowed, group_ownership_not_followed: [...groupOwnershipNotFollowed.values()], failed_company_tribunals: failedCompanyTribunals,
     caveats: ['Companies House often holds several officer records for one person, so appointment histories can be incomplete.', 'Name-based matches (similar names, disqualification hits) are leads to verify, not findings.',
       'Accounts figures are read from iXBRL tags only; a year marked "pdf" or "unavailable" has to be read by hand.',
       `Gazette notices from the last ${GAZETTE_LOOKBACK_MONTHS / 12} years are flagged only when they carry the company number; gazette_name_only lists the rest to check by hand.`,

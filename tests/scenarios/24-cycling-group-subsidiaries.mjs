@@ -37,7 +37,7 @@ export default {
     '/company/ZZ100243': closed('ZZ100243', 'PLACEHOLDER GROUPWORKS TRADING LTD', '2018-01-01', '2020-03-01'),
     '/company/ZZ100244': closed('ZZ100244', 'PLACEHOLDER GROUPWORKS SERVICES LTD', '2019-01-01', '2024-03-01'),
     ...owners('ZZ100241', corporatePsc('Placeholder Groupworks plc', 'ZZ000024', 'England')),
-    ...owners('ZZ100242', { kind: 'legal-person-person-with-significant-control', name: 'Placeholder Groupworks Lending Limited', identification: { legal_form: 'Limited Company', legal_authority: 'Companies Act' } }),
+    ...owners('ZZ100242', { kind: 'legal-person-person-with-significant-control', name: 'Placeholder Groupworks Lending Limited', identification: { legal_form: 'Limited Company', legal_authority: 'Companies Act' }, natures_of_control: ['voting-rights-75-to-100-percent'] }),
     '/search/companies?q=Placeholder Groupworks Lending Limited': {
       items: [{ company_number: 'ZZ100245', title: 'PLACEHOLDER GROUPWORKS LENDING LTD', company_status: 'dissolved', address: office('ZZ24 4AA') }],
     },

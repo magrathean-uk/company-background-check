@@ -25,6 +25,7 @@ export default {
       'company.parents.1.owner_of': 'PLACEHOLDER MIDCO LTD',
       'company.parents.2.level': 3,
       'meta.parents_not_followed': [
+        { name: 'Placeholder Former Owner Limited', owner_of: 'PLACEHOLDER SUBSIDIARY LTD', reason: 'PSC ceased on 2020-01-01' },
         { name: 'Placeholder Overseas BV', owner_of: 'PLACEHOLDER MIDCO LTD', reason: 'registered in Netherlands' },
         { name: 'Placeholder Beyond Limited', owner_of: 'PLACEHOLDER ULTIMATE LTD', reason: 'more than 3 levels up' },
       ],

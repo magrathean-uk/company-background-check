@@ -16,13 +16,17 @@ Two things matter more than anything else:
 
 ## Input
 
-A company name or company number. A job ad, website or location helps disambiguate.
+A company name, company number or website. A job ad or location helps disambiguate.
+
+When a website is supplied, start there before searching the brand alone. Match its operator's registered name, number and jurisdiction from the footer, terms, privacy or about pages to the register and another business identifier. Keep this entity and domain attached to funding, ownership and news claims throughout the check; a better-known namesake on another domain is not the same business.
 
 People usually know a business by its brand, and the brand is often not a registered company. If the name has no match on the register, or the matches are plainly a different business, find the legal entity first: search `<brand> "trading as"`, read the footer, terms and privacy pages of its website, and look at supplier listings and news. Confirm the company number, run the check on that entity, pass the brand to the script with `--aka`, and say at the top of the report which company you checked and why. If the brand has passed between companies, check the one operating it now and cover the earlier ones under the phoenix check.
 
-If several companies match the name, ask which one before going further (the script exits 3 with candidates).
+If several companies still match after checking the supplied website, location and other context, ask which one before going further (the script exits 3 with candidates). When the context resolves the entity, run the script with its company number instead of asking the user to choose again.
 
 If the company is not UK-registered, skip step 1, say so in sections 2 and 3, and use the country's public company register through web search if it has one.
+
+For questions about financial backing, legitimacy, corporate ownership or conflicting claims, read [Evidence, funding and ownership](references/evidence-and-funding.md). Use its claim ledger and reconciliation checks within the existing employer-focused report, not as extra mandatory sections.
 
 ## Step 1 - Companies House (UK companies)
 
@@ -30,7 +34,7 @@ If the company is not UK-registered, skip step 1, say so in sections 2 and 3, an
 
 Needs Node 18 or later. Run `node --version` first: if it errors or hangs, `node` is probably a broken version-manager shim, so look for a real binary (for example under `~/.nvm/versions/node/*/bin/`) and call that by its full path, or tell the user Node is missing. Do not rewrite the script in another language.
 
-Also needs a free API key in the `COMPANIES_HOUSE_API_KEY` environment variable (created at developer.company-information.service.gov.uk). Do not check for it yourself: run the script, and if it exits 2 with "COMPANIES_HOUSE_API_KEY not set", ask the user for the key once, or use path B if they have none. Never print the key or write it into the report.
+Also needs a free API key in the `COMPANIES_HOUSE_API_KEY` environment variable (created at developer.company-information.service.gov.uk). Do not check for it yourself: run the script, and if it exits 2 with "COMPANIES_HOUSE_API_KEY not set", continue with path B. Ask about configuring a key only if the user requested the API path or a material check cannot be completed through public sources. Never print the key or write it into the report.
 
 Run `scripts/ch-check.mjs` from this skill's folder as it is, and write its output to a temp directory. Do not copy, edit or rewrite it: its checks are deterministic so results stay comparable between runs.
 
@@ -48,7 +52,9 @@ The JSON has `company`, `directors` (active directors plus individual owners who
 
 `company.gazette` holds the corporate insolvency notices from The Gazette in the last five years that carry this company's number. A petition to wind up appears there weeks before Companies House shows anything, so the script flags one from the last 24 months as high and any other notice as medium. `meta.gazette_name_only` lists notices that matched a name but not the number: open each, and treat it as this company's only if the address or a director's name confirms it, then rate it as the script would and say you did so by hand. If `company.gazette.failed_searches` is not empty, search The Gazette by hand for those names and note it in "Not checked and limits".
 
-`company.parents` follows owners that are companies up to three levels, to the UK parent. Each parent gets the register and Gazette checks but not the director checks, and its findings come back as flags prefixed `parent_` with the same severity, because a parent's insolvency or winding-up reaches the subsidiary's staff too. Present each one as the parent's, never the employer's own: "Parent {name}: …". Owners recorded without a company number are found by an exact name search and marked `matched_by: "name"`: say so in "Not checked and limits". `meta.parents_not_followed` lists owners registered abroad, owners whose name matched no single company, and owners beyond three levels. Name them under "Not checked and limits", and for a foreign parent run one web search for insolvency or administration news under its name.
+`company.parents` follows active corporate PSCs with explicit majority share or voting control, or board-appointment control, up to three levels. This is an inferred control chain, not a complete shareholder register or proof of a parent's financial guarantee. Each inferred parent gets the register and Gazette checks but not the director checks, and its findings come back as flags prefixed `parent_` with the same severity. Present each one as the parent's, never the employer's own: "Parent {name}: …". Owners recorded without a company number are found by an exact name search and marked `matched_by: "name"`: say so in "Not checked and limits".
+
+`meta.parents_not_followed` records corporate PSCs not followed and why, including ceased status, insufficient control evidence, foreign registration, ambiguous names and the depth limit. Describe minority and historical owners as such in section 3, without inheriting their findings as parent risks. Cessation of PSC status does not prove all shares were sold. `meta.group_ownership_not_followed` records related-company links whose group control could not be established; retain the pattern findings and explain the uncertainty. For a foreign inferred parent, run one web search for insolvency or administration news under its name. Say "No current corporate parent identified in the records checked" when appropriate, not that no wider relationship exists.
 
 These public records come back as context:
 
@@ -69,6 +75,8 @@ The script raises these flags from iXBRL accounts. Apply them by hand to PDF acc
 - **Net assets fall** (medium): net assets more than halved since the year before, while still positive.
 - **Headcount fall** (medium): average employees in the latest year more than a quarter below the highest year in the history, so cuts spread over several years still count. Skip it when that highest year had fewer than 5 employees, where one person leaving is not a trend.
 
+Keep every financial conclusion tied to its accounting date. Current assets are not cash; historical net liabilities do not establish current cash insolvency, and an announced funding round does not remove the historical flag. Historical payroll cover is not current runway. Do not infer today's workforce from a historic average of zero employees.
+
 ### Reading PDF accounts
 
 A `pdf` year carries `document`: `url` downloads the PDF without an API key, `pages` is its length, and `scanned: true` means it was filed on paper and has no text layer. In path B, the filing history's "View PDF" link is the same file. Download it with `curl -sL -o accounts.pdf "<url>"`. The figures are on the balance sheet (net assets, cash), the profit and loss account (turnover) and the employees note, and the going-concern wording is in the directors' report and the audit report.
@@ -78,7 +86,8 @@ Use the first of these that works where you are running:
 1. Your own file reader, if it shows you PDF pages as images. Read only the pages you need.
 2. If the PDF is not scanned: `pdftotext -layout accounts.pdf -`.
 3. If it is scanned, or no text came out: on macOS, run `osascript -l JavaScript <skill folder>/scripts/pdf-text-macos.js /absolute/path/accounts.pdf [first page] [last page]`. It needs nothing installed and recognises scanned pages with the system's own text recognition. Elsewhere, if `pdftoppm` and `tesseract` are installed, run `pdftoppm -r 200 -png accounts.pdf page`, then `tesseract <page image> -` on each page you need.
-4. If none of these works, do not install anything without asking the user. Write the year's format as "PDF (not read)" with n/a figures, link the PDF in "Verify next", and rate Coverage of this check as Caution.
+4. If the document cannot be retrieved or read, try an alternative format linked by the filing page, then a targeted search for the exact company number and filing. Indexed text of the primary filing may support figures when the document, period, labels, units and signs are clear and totals or comparatives cross-check. Label the format "PDF (indexed text)" and state "Indexed filing text; original document not inspected" in the limits. Do not claim to have inspected the PDF, checked the full audit opinion or ruled out a going-concern note from an excerpt. Rate Coverage of this check as Caution.
+5. If none of these works, do not install anything without asking the user. Write the year's format as "PDF (not read)" with n/a figures, link the PDF in "Verify next", and rate Coverage of this check as Caution.
 
 Recognised text can misread digits. Before using a figure, check it against a second place it appears: net assets also appear as total equity, and the next year's accounts repeat this year's figures as comparatives.
 
@@ -88,7 +97,7 @@ Some environments block outbound API calls. The same data is on the public Compa
 
 1. Web-search `<company name> Companies House` and open the company's page on find-and-update.company-information.service.gov.uk.
 2. Read the overview (status, incorporation date, accounts and confirmation statement due dates, previous names), then the People, Filing history, Charges and Insolvency tabs. Open the latest two sets of accounts from the filing history, read them as in "Reading PDF accounts" and apply the accounts rules above. Search thegazette.co.uk for corporate insolvency notices under each current and previous name, and rate the ones that show the company number as the script does: a petition to wind up in the last 24 months is high, any other insolvency notice from the last five years is medium.
-3. For an owner that is a UK company, open its Companies House page and check its status, filings, insolvency and Gazette notices the same way, up to three levels.
+3. Record each corporate PSC's control basis and whether it is current or ceased. Follow a UK corporate owner as an inferred parent only when majority or board control is supported, checking its status, filings, insolvency and Gazette notices up to three levels. Keep minority, former and uncertain relationships separate; do not treat their findings as the employer's or an inferred parent's. Use the same control test before treating another company as a group member in the phoenix and cycling checks.
 4. Open the appointments page of each active director and of each individual owner (find owners with the officer search, matching name and birth month), and apply the phoenix test below by hand.
 5. Record in "Not checked and limits" that path B was used and what could not be opened.
 
@@ -129,7 +138,7 @@ Run these searches (in parallel where possible), look back about five years, and
 
 | Topic | Search for | Capture |
 |---|---|---|
-| Funding and investment | `<name> funding round raised investment`, `<name> acquired acquisition investors` | Date, type (seed, Series A, grant, debt, acquisition), amount, investors or acquirer |
+| Funding and investment | `<name> funding round raised investment`, `<name> acquired acquisition investors` | Event and publication dates, currency, amount, round versus cumulative total, announced/closed/estimated status, investors or acquirer, original source |
 | Redundancies | `<name> redundancies layoffs job cuts`, `<name> restructuring`, then `<name> job cuts <year>` for each of the last five years the first results do not cover | Every round in the last five years, newest first: date, what happened, how many or what share of staff. Add any year-on-year fall in average employees from the accounts history |
 | Media coverage | `<name> news`, `<name> <CEO or founder name>` | Up to 8 items: date, outlet, headline, tone |
 | Legal and financial trouble | `<name> administration insolvency winding up`, `<name> employment tribunal`, `<name> The Gazette notice`, `<name> lawsuit fine investigation` | Tribunal decisions, winding-up petitions, regulator action, unpaid wages or other money owed to staff |
@@ -141,6 +150,8 @@ Run these searches (in parallel where possible), look back about five years, and
 **Tone labels for media items.** Label each item Positive, Neutral or Negative for what it says about the company as a business and employer, not for the writer's style. Growth, funding, awards and contract wins are Positive. Layoffs, losses, disputes, regulatory action and unpaid bills are Negative. The company's own press releases and sponsored pieces are Neutral and marked "(own PR)". The overall tone is Positive, Mixed, Negative or Little coverage.
 
 **Review sites.** Glassdoor and LinkedIn have no public API and forbid scraping, so use only what search results and openly readable pages show. Report a rating only if a source states it; otherwise write "Not found". Never estimate one.
+
+**Funding evidence.** Do not add a cumulative total to rounds it may include, or count corrected filings as additional raises. Nominal share capital is not cash raised, valuation is not cash in the bank, and investor promotion does not establish a paid investment. Preserve conflicting amounts with their sources and dates. Treat paywall placeholders and retrieval failures as evidence limitations, not company misconduct. Directory listings, accelerator membership and a sound product concept do not establish revenue, security certification or a tested implementation; attribute each claim at its actual scope.
 
 **Directors are people.** Report only their company roles and business press. Leave out home addresses, dates of birth, family and personal social media.
 
@@ -215,7 +226,7 @@ Save the page as `<company-name>-background-check.html` and open it in the user'
 
 | Year end | Net assets | Net current assets | Cash | Payroll cover | Avg employees | Turnover | Format |
 |---|---|---|---|---|---|---|---|
-| {D Mon YYYY} | {£} | {£} | {£} | {n} months | {n} | {£} | {iXBRL, PDF (read by hand), PDF (not read) or Unavailable} |
+| {D Mon YYYY} | {£} | {£} | {£} | {n} months | {n} | {£} | {iXBRL, PDF (read by hand), PDF (indexed text), PDF (not read) or Unavailable} |
 
 Under the table, one short paragraph per point, in everyday words, for the latest year:
 
@@ -232,13 +243,15 @@ Avoid "revaluation reserve", "net current liabilities", "retained profit" and "p
 | {name}, with the role on a second line | {D Mon YYYY} | {count of other appointments, with how many closed and how many insolvent in brackets, such as "11 (4 closed, 1 insolvent)", or "None"} | {one or two short sentences. Failed companies and patterns go in the phoenix check and red flags, not here} |
 
 **Owners (PSCs):** {names and level of control}
-**Group:** {UK parents in order up the chain, each with its status and any finding, or "No corporate owner"; owners not followed and why}
+**Group:** {inferred or independently confirmed UK parents in order up the chain, each with its control basis, status and any finding; minority and historical corporate owners separately; or "No current corporate parent identified in the records checked". Name owners not followed and why}
 **Phoenix check:** {Possible | Strong | Serial} - {one sentence, naming the companies involved; for a chain, list them in date order with their years}. Only when a pattern was found. When none was, leave the block out entirely and do not describe what was looked for.
 
 ## 4. Funding and investment
 
 | Date | Event | Amount | Investors / parties | Source |
 |---|---|---|---|---|
+
+Put scope and evidence status in Event (for example, "Reported cumulative equity funding" or "Announced seed round") and attribution in Source. Do not force a cumulative total into a transaction date: use the publisher's as-of date and label it. State below the table which totals overlap or conflict, and whether current cash, burn and runway are unknown. Keep valuation separate from funds received.
 
 ## 5. Redundancies and layoffs
 
@@ -273,7 +286,7 @@ Avoid "revaluation reserve", "net current liabilities", "retained profit" and "p
 
 ## 10. Not checked and limits
 
-- {Which Companies House path was used; caps hit; pages that could not be opened; name matches that still need verifying}
+- {Which Companies House path was used; caps hit; pages that could not be opened; indexed evidence not inspected as a full document; unresolved funding or ownership contradictions; name matches that still need verifying}
 
 ## 11. Sources
 

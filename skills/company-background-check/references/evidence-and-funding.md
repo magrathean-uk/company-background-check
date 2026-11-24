@@ -1,0 +1,57 @@
+# Evidence, funding and ownership
+
+Use this reference when backing, legitimacy, ownership or conflicting financial claims need closer examination. Keep the eleven report sections and existing risk rules. Distinguish a recorded concern from uncertainty about the evidence.
+
+## Resolve the entity before collecting claims
+
+Start with the supplied website. Read its footer, terms, privacy and about pages for the operator's registered name, number and jurisdiction. Cross-check the register and another business identifier, such as sector or directors. Record the domain, brand and relevant employer or contracting entity.
+
+Search funding and press only after this match. Exclude namesakes, including companies using the same brand on a different domain. A website alone does not prove which entity operates it. Ask only when plausible candidates remain after using the supplied context.
+
+## Keep a claim ledger
+
+Keep these notes for material claims; carry attribution into the report.
+
+| Field | Record |
+|---|---|
+| Entity | Registered name, company number and jurisdiction |
+| Claim | Exact amount, currency, accounting label or asserted relationship |
+| Dates | Event or accounting period, publication date and retrieval date/time |
+| Source | Exact URL, publisher and filing identifier or page where available |
+| Inspection | Full document, rendered page, indexed filing text, snippet or company statement |
+| Assessment | Supported as a filed fact, independently corroborated, attributed report, inference or unresolved |
+
+Prefer filings for what was filed and original announcements for what was announced. Neither proves present cash or successful delivery. Treat syndicated copies as one evidence origin. Keep conflicting versions and dates; do not choose the larger figure or latest snippet without reconciling them.
+
+## Recover inaccessible evidence without overstating it
+
+If retrieval fails, try the public filing page, an alternative format linked there, then search for the exact company number and filing. Use indexed primary-source text only when it identifies the document and period and preserves labels, units and signs. Cross-check totals, repeated equity figures or comparatives. Describe secondary summaries as corroboration, never as the original filing.
+
+Label this route "Indexed filing text; original document not inspected". Do not claim a PDF was read, a complete note was absent or an audit conclusion was checked from an excerpt. After these alternatives, retain unknown values and the source link. Failed retrieval is a coverage limitation, not adverse company evidence.
+
+## Reconcile the money
+
+- Record whether each amount is a single round, cumulative funding, debt, grant, valuation, acquisition consideration or cash. Record the currency and whether it is announced, committed, closed, estimated or independently evidenced. An investor's name in promotional material does not prove a paid subscription.
+- Compare dates, investors and underlying allotments before treating articles as separate rounds. Never add a cumulative total to a round it may include. A replacement or corrected filing is not automatically another transaction. Leave incompatible estimates unresolved rather than manufacturing a precise total.
+- Distinguish nominal share capital from issue proceeds and share premium. An allotment or statement-of-capital headline alone does not establish cash received; inspect the underlying terms and consider non-cash consideration.
+- Preserve accounting labels. Current assets may include receivables and are not cash. Net assets are not valuation. Negative equity describes a balance-sheet date, not proven current cash insolvency. Explain any later reported financing separately; do not remove the historical flag without the required evidence.
+- Do not infer today's workforce from a historic average employee count, especially zero. Directors, contractors and later hires may be outside that figure. Date each headcount estimate and distinguish payroll employees from profile counts.
+- Do not calculate current runway without current unrestricted cash and a supported net monthly burn estimate for a compatible period. Historical payroll cover is a narrower ratio, not runway. If these inputs are absent, say runway is unknown and request them.
+
+## Trace control over time
+
+Separate active corporate controllers, minority shareholders, ceased controllers, advisers and commercial partners. A corporate PSC holding more than 25% but no more than 50% is not automatically a parent; require evidence of control, such as majority voting rights, board-appointment rights or accounts identifying a parent. Follow confirmed control links and record their basis and effective dates.
+
+Treat cessation of PSC status as the end of that declared control, not proof every share was sold. Ownership bands are not exact percentages or a full cap table. If reported dilution conflicts with PSC bands, report the discrepancy and request the current shareholder register and fully diluted cap table. Say "No current corporate parent identified in the records checked" when appropriate; do not rule out wider relationships.
+
+## Validate credibility claims at their actual scope
+
+Separate legal existence, professional relationships, commercial traction and technical delivery. Registration supports identity; directory inclusion or accelerator membership supports that relationship, not product certification. A partner's own announcement is stronger evidence of a relationship than the company's logo wall, but still does not establish paying customers, revenue or security quality.
+
+Distinguish a technically valid concept from a tested implementation. For material product claims, seek an independently reproducible demonstration, dated audit scope or customer evidence relevant to the user's decision. Label what was not tested. Paywall masking, placeholder text behind sign-up gates and missing public metrics are not, by themselves, signs of misconduct.
+
+## Fit findings into the existing report
+
+Use section 2 for dated accounts and inspection limits, section 3 for current and historical control, section 4 for attributed funding, and section 8 for corroborated relationships and product claims. Put unresolved contradictions and access limits in section 10; keep exact links in section 11. In section 9, prioritise the missing evidence most likely to change the decision: cash and burn, completed subscriptions, current ownership or a reproducible product check.
+
+Retain the existing flag severities and scorecard rules. Explain uncertainty in the relevant area and Coverage of this check. Do not invent a fraud probability, clear a concern because funding was announced, or portray lack of validation as proof of failure.
