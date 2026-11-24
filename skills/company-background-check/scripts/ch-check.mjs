@@ -109,14 +109,50 @@ async function withRetries(attempts, send, { companiesHouse = false } = {}) {
   }
 }
 
-async function get(path) {
+async function get(path, { optional = false } = {}) {
   let res;
   try {
     res = await withRetries(4, () => fetch(BASE + path, { headers: auth() }), { companiesHouse: true });
-  } catch (e) { fail(2, `API unreachable: ${e.cause?.code || e.message}`); }
-  if (res.status === 404) return null;
+  } catch (e) { if (optional) return null; fail(2, `API unreachable: ${e.cause?.code || e.message}`); }
+  if (res.status === 404 || (optional && !res.ok)) return null;
   if (!res.ok) fail(2, `API error ${res.status} on ${path}`);
-  return res.json();
+  try { return await res.json(); } catch (e) { if (optional) return null; throw e; }
+}
+
+// Cache complete PSC registers independently of the date used to interpret them.
+const pscLists = new Map(), pscPaging = {}, historicalFilings = new Map(), historicalProfiles = new Map();
+async function getPsc(num) {
+  if (pscLists.has(num)) return pscLists.get(num);
+  const pending = (async () => {
+    const items = [], previousKeys = new Set(); let complete = false, reason = null, total = null;
+    for (let page = 0; page < 20; page++) {
+      const start = items.length;
+      const path = `/company/${num}/persons-with-significant-control?items_per_page=50${page ? `&start_index=${start}` : ''}`;
+      let data;
+      try {
+        const response = await withRetries(4, () => fetch(BASE + path, { headers: auth() }), { companiesHouse: true });
+        if (response.ok) data = await response.json();
+      } catch { /* An incomplete register is evidence of a coverage gap. */ }
+      if (!data || !Array.isArray(data.items) || data.items.some(item => !item || typeof item !== 'object' || Array.isArray(item) || (item.natures_of_control !== undefined && (!Array.isArray(item.natures_of_control) || item.natures_of_control.some(value => typeof value !== 'string'))) || (item.identification !== undefined && (!item.identification || typeof item.identification !== 'object' || Array.isArray(item.identification) || ['registration_number', 'country_registered', 'place_registered', 'legal_authority'].some(key => item.identification[key] !== undefined && typeof item.identification[key] !== 'string'))) || (item.name !== undefined && typeof item.name !== 'string') || (item.kind !== undefined && typeof item.kind !== 'string')) || !Number.isInteger(data.total_results) || data.total_results < 0 ||
+          (data.start_index !== undefined && data.start_index !== start) || data.total_results < start + data.items.length ||
+          (total !== null && total !== data.total_results) || data.items.length > 50) {
+        reason = 'PSC register unavailable or malformed'; break;
+      }
+      // Only compare with earlier pages: identical entries on one page do not prove overlap.
+      const keys = data.items.map(item => typeof item.links?.self === 'string' ? `link:${item.links.self}` : `record:${JSON.stringify(item)}`);
+      if (keys.some(key => previousKeys.has(key))) { reason = 'PSC pages overlap'; break; }
+      for (const key of keys) previousKeys.add(key);
+      total = data.total_results;
+      items.push(...data.items);
+      if (items.length === data.total_results) { complete = true; break; }
+      if (!data.items.length) { reason = 'PSC register truncated'; break; }
+    }
+    if (!complete && !reason) reason = 'PSC page limit reached';
+    pscPaging[num] = { complete, ...(reason && { reason }) };
+    return { items, complete };
+  })();
+  pscLists.set(num, pending);
+  return pending;
 }
 
 // Document API failures only cost the accounts figures, so they return null instead of ending the run.
@@ -413,13 +449,15 @@ if (!KEY) fail(2, 'COMPANIES_HOUSE_API_KEY not set');
 const number = await resolve(arg);
 const c = await get(`/company/${number}`);
 if (!c) fail(1, `Company ${number} not found`);
+historicalProfiles.set(number, Promise.resolve(c));
 const [off, psc, insolv, charges, filings] = await Promise.all([
   get(`/company/${number}/officers?items_per_page=100`),
-  get(`/company/${number}/persons-with-significant-control?items_per_page=50`),
+  getPsc(number),
   get(`/company/${number}/insolvency`),
   get(`/company/${number}/charges`),
   get(`/company/${number}/filing-history?items_per_page=100`),
 ]);
+historicalFilings.set(number, Promise.resolve(filings));
 
 // The full export is about 100MB, so it streams in the background while the other checks run
 const paymentPracticesPending = paymentPractices(number);
@@ -532,11 +570,13 @@ while (parentQueue.length) {
     const parent = await get(`/company/${parentNumber}`);
     if (!parent) { notFollowed(`no Companies House record for ${parentNumber}`); continue; }
     seenInGroup.add(parentNumber);
+    historicalProfiles.set(parentNumber, Promise.resolve(parent));
     const [parentPsc, parentInsolvency, parentFilings] = await Promise.all([
-      get(`/company/${parentNumber}/persons-with-significant-control?items_per_page=50`),
+      getPsc(parentNumber),
       get(`/company/${parentNumber}/insolvency`),
       get(`/company/${parentNumber}/filing-history?items_per_page=100`),
     ]);
+    historicalFilings.set(parentNumber, Promise.resolve(parentFilings));
     const parentGazette = await gazetteCheck([parent.company_name, ...(parent.previous_company_names || []).map(x => x.name)], parentNumber);
     const parentFlags = [...registerFlags(parent, parentNumber, parentInsolvency, parentFilings?.items), ...parentGazette.flags];
     for (const f of parentFlags) flag(f.severity, `parent_${f.code}`, `Parent ${parent.company_name}: ${f.text}`, f.url);
@@ -645,41 +685,113 @@ const recentResignations = officers.filter(o => o.resigned_on && isDir(o) && mon
 if (recentResignations.length >= 2) flag('medium', 'director_churn', `${recentResignations.length} directors resigned in the last 12 months`, `${SITE}/company/${number}/officers`);
 if (!activeDirs.length) flag('high', 'no_directors', 'No active directors on record', `${SITE}/company/${number}/officers`);
 
-// A company in the target's own group closing (a subsidiary, or a sister under the same parent) is group housekeeping,
-// not a company cycled out from under its staff
-const groupOwnership = new Map(), groupOwnershipNotFollowed = new Map(), groupPscs = new Map();
-const pscsOf = num => {
-  if (!groupPscs.has(num)) groupPscs.set(num, get(`/company/${num}/persons-with-significant-control?items_per_page=50`));
-  return groupPscs.get(num);
-};
-async function inTargetGroup(num, depth = 0) {
-  if (seenInGroup.has(num)) return true;
-  if (depth >= MAX_PARENT_LEVELS) return false;
-  // A depth-limited miss on one route must not hide a shorter, confirmed route later.
-  const cacheKey = `${num}:${depth}`;
-  if (groupOwnership.has(cacheKey)) return groupOwnership.get(cacheKey);
-  const owners = (await pscsOf(num))?.items || [];
-  let owned = false;
-  for (const owner of owners) {
-    if (!owner.name || !isOrganisationPsc(owner)) continue;
-    const controlGap = parentControlGap(owner);
-    if (controlGap) {
-      groupOwnershipNotFollowed.set(`${num}:${owner.name}:${controlGap}`, { name: owner.name, owner_of: num, reason: controlGap, psc_url: pscUrl(num) });
-      continue;
-    }
-    // Match the registration namespace before looking up a PSC by number or name.
-    const reason = registerIssue(owner.identification || {});
-    if (reason) {
-      groupOwnershipNotFollowed.set(`${num}:${owner.name}:${reason}`, { name: owner.name, owner_of: num, reason, psc_url: pscUrl(num) });
-      continue;
-    }
-    // Subsidiaries often record their owner by name only, and that owner may be dissolved by now too
-    const ownerNumber = companyNumberKey(owner.identification?.registration_number)
-      || [(await searchCompanies(owner.name)).filter(i => bareName(i.title) === bareName(owner.name))].find(m => m.length === 1)?.[0].company_number;
-    if (ownerNumber && await inTargetGroup(ownerNumber, depth + 1)) { owned = true; break; }
+// Historical membership needs two independently dated paths to a common company.
+const groupOwnershipNotFollowed = new Map(), historicalSearches = new Map();
+const validDate = value => typeof value === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(value) &&
+  !Number.isNaN(Date.parse(value)) && new Date(value).toISOString().slice(0, 10) === value;
+function groupGap(num, owner, reason, gaps, sourceUrl) {
+  gaps.reasons.add(reason);
+  if (sourceUrl) gaps.sources.add(sourceUrl);
+  groupOwnershipNotFollowed.set(`${num}:${owner?.name || ''}:${reason}`, { name: owner?.name || null, owner_of: num, reason, psc_url: pscUrl(num), ...(sourceUrl && { source_url: sourceUrl }) });
+}
+async function historicalProfile(num) {
+  if (profiles.has(num)) return profiles.get(num);
+  if (!historicalProfiles.has(num)) historicalProfiles.set(num, get(`/company/${num}`, { optional: true }));
+  return historicalProfiles.get(num);
+}
+function aliveAt(candidate, asOf) {
+  return candidate && validDate(candidate.date_of_creation) && candidate.date_of_creation <= asOf &&
+    !(candidate.company_status === 'dissolved' && !candidate.date_of_cessation) &&
+    (!candidate.date_of_cessation || (validDate(candidate.date_of_cessation) && candidate.date_of_cessation >= asOf));
+}
+function nameAt(candidate, name, asOf) {
+  if (typeof candidate.company_name !== 'string' || (candidate.previous_company_names !== undefined && !Array.isArray(candidate.previous_company_names))) return null;
+  const previous = candidate.previous_company_names || [];
+  if (previous.some(n => !n || typeof n.name !== 'string' || !validDate(n.effective_from) || !validDate(n.ceased_on) || n.effective_from >= n.ceased_on)) return null;
+  const key = canonName(name);
+  const namesAtClosure = previous.filter(n => n.effective_from <= asOf && asOf < n.ceased_on);
+  if (namesAtClosure.length > 1) return null;
+  if (namesAtClosure.length) return canonName(namesAtClosure[0].name) === key;
+  const currentFrom = previous.map(n => n.ceased_on).sort().at(-1) || candidate.date_of_creation;
+  return canonName(candidate.company_name) === key && currentFrom <= asOf;
+}
+async function historicalFilingItems(num) {
+  if (!historicalFilings.has(num)) historicalFilings.set(num, get(`/company/${num}/filing-history?items_per_page=100`, { optional: true }));
+  return historicalFilings.get(num);
+}
+async function historicalOwnerNumber(owner, asOf) {
+  const registration = companyNumberKey(owner.identification?.registration_number);
+  if (registration) {
+    if (!/^([A-Z]{2}\d{6}|\d{8})$/.test(registration)) return null;
+    const candidate = await historicalProfile(registration);
+    return aliveAt(candidate, asOf) ? { number: registration, matchedBy: 'registration_number', candidate } : null;
   }
-  groupOwnership.set(cacheKey, owned);
-  return owned;
+  if (!historicalSearches.has(owner.name)) historicalSearches.set(owner.name, get(`/search/companies?q=${encodeURIComponent(owner.name)}&items_per_page=5`, { optional: true }));
+  const result = await historicalSearches.get(owner.name);
+  if (!result || !Array.isArray(result.items) || result.items.some(item => !item || typeof item !== 'object' || typeof item.title !== 'string' || typeof item.company_number !== 'string') || !Number.isInteger(result.total_results) || result.total_results !== result.items.length) return null;
+  const eligible = [];
+  for (const match of result.items) {
+    const num = companyNumberKey(match.company_number);
+    if (!/^([A-Z]{2}\d{6}|\d{8})$/.test(num)) return null;
+    const candidate = await historicalProfile(num);
+    if (!candidate || !validDate(candidate.date_of_creation) || (candidate.company_status === 'dissolved' && !candidate.date_of_cessation) || (candidate.date_of_cessation && !validDate(candidate.date_of_cessation))) return null;
+    if (!aliveAt(candidate, asOf)) continue;
+    const nameMatches = nameAt(candidate, owner.name, asOf);
+    if (nameMatches === null) return null;
+    if (nameMatches) eligible.push({ number: num, matchedBy: 'name', candidate });
+  }
+  return eligible.length === 1 ? eligible[0] : null;
+}
+async function datedPaths(start, asOf, gaps) {
+  const paths = new Map([[start, []]]), queue = [{ num: start, path: [] }];
+  while (queue.length) {
+    const { num, path } = queue.shift();
+    if (path.length >= MAX_PARENT_LEVELS) { gaps.reasons.add(`ownership traversal limited to ${MAX_PARENT_LEVELS} levels`); continue; }
+    const list = await getPsc(num);
+    if (!list.complete) { groupGap(num, null, 'PSC register incomplete', gaps); continue; }
+    for (const owner of list.items.filter(isOrganisationPsc)) {
+      const gap = (reason, sourceUrl) => groupGap(num, owner, reason, gaps, sourceUrl);
+      if (!owner.name) { gap('PSC owner name missing'); continue; }
+      if (!validDate(owner.notified_on) || (owner.ceased_on && !validDate(owner.ceased_on)) || (owner.ceased_on && owner.ceased_on <= owner.notified_on)) { gap('PSC dates missing or invalid'); continue; }
+      if (owner.notified_on > asOf) { gap(`PSC notified after ${asOf}`); continue; }
+      if (owner.ceased_on && owner.ceased_on <= asOf) { gap(`PSC ceased on ${owner.ceased_on}`); continue; }
+      if (!(owner.natures_of_control || []).some(control => PARENT_CONTROLS.has(control))) { gap('PSC record does not establish majority control'); continue; }
+      const issue = registerIssue(owner.identification || {});
+      if (issue) { gap(issue); continue; }
+      const match = await historicalOwnerNumber(owner, asOf);
+      if (!match?.number || !/^([A-Z]{2}\d{6}|\d{8})$/.test(match.number)) { gap('owner could not be uniquely matched at the relevant date'); continue; }
+      const history = await historicalFilingItems(num);
+      const historyTotal = history?.total_count ?? history?.total_results;
+      if (!history || !Array.isArray(history.items) || history.items.some(item => !item || typeof item !== 'object' || Array.isArray(item)) || !Number.isInteger(historyTotal) || historyTotal !== history.items.length || (history.start_index !== undefined && history.start_index !== 0)) { gap('PSC filing history unavailable or incomplete', `${SITE}/company/${num}/filing-history`); continue; }
+      const changes = history.items.filter(f => /^(?:LL)?PSC0[56]$/i.test(f.type || ''));
+      const aliases = [owner.name, match.candidate.company_name, ...(Array.isArray(match.candidate.previous_company_names) ? match.candidate.previous_company_names : []).map(n => n?.name)].filter(n => typeof n === 'string').map(canonName);
+      const uncertainChange = changes.find(f => {
+        const name = f.description_values?.psc_name, change = f.description_values?.change_date;
+        if (name && typeof name === 'string' && !aliases.includes(canonName(name))) return false;
+        return typeof name !== 'string' || !name || !validDate(change) || change > asOf || change < owner.notified_on || (owner.ceased_on && change >= owner.ceased_on);
+      });
+      if (uncertainChange) { gap(`PSC control change${uncertainChange.description_values?.change_date ? ` dated ${uncertainChange.description_values.change_date}` : ''} cannot be established at the relevant date`, `${SITE}/company/${num}/filing-history`); continue; }
+      const edge = { owner_of: num, owner_number: match.number, owner_url: `${SITE}/company/${match.number}`, name: owner.name, matched_by: match.matchedBy, psc_url: pscUrl(num), notified_on: owner.notified_on, ceased_on: owner.ceased_on || null, control: owner.natures_of_control || [] };
+      const next = [...path, edge];
+      if (paths.has(match.number)) continue;
+      paths.set(match.number, next);
+      queue.push({ num: match.number, path: next });
+    }
+  }
+  return paths;
+}
+async function historicalGroup(num, asOf, dateSource, relatedCompany) {
+  const gaps = { reasons: new Set(), sources: new Set() }, dateUrl = `${SITE}/company/${num}${dateSource === 'members_voluntary_winding_up' ? '/insolvency' : ''}`;
+  if (!validDate(asOf)) return { group_member: false, group_membership_gap: { as_of: null, date_source: dateSource, date_url: dateUrl, reasons: ['closure date unavailable or invalid'] } };
+  if (!validDate(relatedCompany.date_of_creation) || relatedCompany.date_of_creation > asOf || (relatedCompany.date_of_cessation && (!validDate(relatedCompany.date_of_cessation) || relatedCompany.date_of_cessation < asOf)))
+    return { group_member: false, group_membership_gap: { as_of: asOf, date_source: dateSource, date_url: dateUrl, reasons: ['related company lifetime does not establish membership at closure'] } };
+  if (!validDate(c.date_of_creation) || c.date_of_creation > asOf || (c.date_of_cessation && (!validDate(c.date_of_cessation) || c.date_of_cessation < asOf)))
+    return { group_member: false, group_membership_gap: { as_of: asOf, date_source: dateSource, date_url: dateUrl, reasons: ['target company lifetime does not establish membership at closure'] } };
+  const [related, target] = await Promise.all([datedPaths(num, asOf, gaps), datedPaths(number, asOf, gaps)]);
+  for (const [common, relatedPath] of related) {
+    if (target.has(common)) return { group_member: true, group_membership: { as_of: asOf, date_source: dateSource, date_url: dateUrl, common_company_number: common, related_path: relatedPath, target_path: target.get(common) } };
+  }
+  return { group_member: false, group_membership_gap: { as_of: asOf, date_source: dateSource, date_url: dateUrl, reasons: [...gaps.reasons, 'group membership not established at closure'], source_urls: [...gaps.sources] } };
 }
 
 const profiles = new Map();
@@ -777,7 +889,12 @@ for (const o of people) {
     if (failedOn && c.date_of_creation && months(failedOn, c.date_of_creation) <= PHOENIX_WINDOW_MONTHS) signals.push(`target incorporated within ${PHOENIX_WINDOW_MONTHS} months of its ${insolventFrom ? 'insolvency' : 'closure'}`);
     else if (!failedOn && wasInsolvent && ageMonths !== null && ageMonths <= PHOENIX_WINDOW_MONTHS) signals.push('target incorporated recently while this company is insolvent');
     const phoenix = !wasInsolvent || notTheirs ? null : signals.includes('similar name') && signals.length >= 3 ? 'strong' : signals.length >= 2 ? 'possible' : null;
-    if (sameName || samePostcode) related.push({ name: p.company_name, number: p.company_number, status: p.company_status, incorporated: p.date_of_creation || null, ceased: p.date_of_cessation || null, closed: !!closed, insolvent: !!wasInsolvent, failure_not_theirs: notTheirs, solvent_liquidation: solventLiquidation, group_member: Boolean(closed && !wasInsolvent && await inTargetGroup(p.company_number)), url: `${SITE}/company/${p.company_number}` });
+    if (sameName || samePostcode) {
+      const dateSource = solventLiquidation ? 'members_voluntary_winding_up' : 'dissolution';
+      const closureDate = solventLiquidation ? (cases || []).flatMap(x => x.dates || []).filter(d => d.type === 'wound-up-on').map(d => d.date).sort()[0] : p.date_of_cessation;
+      const group = closed && !wasInsolvent ? await historicalGroup(p.company_number, closureDate, dateSource, p) : { group_member: false };
+      related.push({ name: p.company_name, number: p.company_number, status: p.company_status, incorporated: p.date_of_creation || null, ceased: validDate(p.date_of_cessation) ? p.date_of_cessation : null, closed: !!closed, insolvent: !!wasInsolvent, failure_not_theirs: notTheirs, solvent_liquidation: solventLiquidation, ...group, url: `${SITE}/company/${p.company_number}` });
+    }
     if (!closed) continue; // active companies only count towards the cycling check below
     if (!wasInsolvent && signals.length < 2) continue; // plain dissolved company, nothing to report
     failed.push({ name: p.company_name, number: p.company_number, status: p.company_status, insolvent_from: insolventFrom, ceased: p.date_of_cessation || null,
@@ -840,7 +957,7 @@ for (const linked of failedToSearch.slice(0, MAX_FAILED_COMPANY_TRIBUNAL_SEARCHE
 }
 
 const pscs = (psc?.items || []).filter(p => !p.ceased_on).map(p => ({ name: p.name, kind: p.kind === 'legal-person-with-significant-control' ? 'legal-person' : (p.kind || '').replace(/-person-with-significant-control$/, ''), control: p.natures_of_control || [] }));
-if (!pscs.length) flag('info', 'no_psc', 'No active person with significant control on record', `${SITE}/company/${number}/persons-with-significant-control`);
+if (!pscs.length && psc.complete) flag('info', 'no_psc', 'No active person with significant control on record', `${SITE}/company/${number}/persons-with-significant-control`);
 
 const order = { high: 0, medium: 1, low: 2, info: 3 };
 flags.sort((a, b) => order[a.severity] - order[b.severity]);
@@ -867,7 +984,7 @@ console.log(JSON.stringify({
     active_directors: activeDirs.length, resigned_last_12_months: recentResignations.length, url: `${SITE}/company/${number}`,
   },
   directors, pscs, flags,
-  meta: { requests, directors_not_checked: Math.max(0, activeDirs.length - MAX_DIRECTORS), people_without_officer_record: people.filter(p => !p.paths.length).map(p => p.name), company_lookups_skipped: skippedLookups, gazette_name_only: gazette.name_only, parents_not_followed: parentsNotFollowed, group_ownership_not_followed: [...groupOwnershipNotFollowed.values()], failed_company_tribunals: failedCompanyTribunals,
+  meta: { requests, directors_not_checked: Math.max(0, activeDirs.length - MAX_DIRECTORS), people_without_officer_record: people.filter(p => !p.paths.length).map(p => p.name), company_lookups_skipped: skippedLookups, gazette_name_only: gazette.name_only, parents_not_followed: parentsNotFollowed, group_ownership_not_followed: [...groupOwnershipNotFollowed.values()], psc_paging: pscPaging, failed_company_tribunals: failedCompanyTribunals,
     caveats: ['Companies House often holds several officer records for one person, so appointment histories can be incomplete.', 'Name-based matches (similar names, disqualification hits) are leads to verify, not findings.',
       'Accounts figures are read from iXBRL tags only; a year marked "pdf" or "unavailable" has to be read by hand.',
       `Gazette notices from the last ${GAZETTE_LOOKBACK_MONTHS / 12} years are flagged only when they carry the company number; gazette_name_only lists the rest to check by hand.`,
