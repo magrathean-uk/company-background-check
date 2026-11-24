@@ -1,0 +1,11 @@
+schema_version: "1.1"
+name: funding-and-ownership-evidence
+expected_outcome: |
+  The skill resolves the supplied domain to Placeholder Draining Ltd (ZZ000013), runs the
+  bundled script and preserves its net-assets-fall finding. The report uses the supplied
+  fictional source pack with clear attribution: indexed 2024 accounts are not described as
+  an inspected PDF, cumulative and overlapping funding are not added, nominal capital and
+  current assets are not cash, and present runway and valuation remain unverified.
+  Historical control, a current minority stake and an adviser relationship are kept
+  distinct from a current parent. Directory membership and paywall masking do not become
+  product endorsement or misconduct evidence. The fixed report sections remain intact.

@@ -22,7 +22,7 @@ export default {
       'company.parents.0.number': 'ZZ000201',
       'company.parents.0.matched_by': 'name',
       'meta.parents_not_followed': [
-        { name: 'Placeholder Twin Limited', owner_of: 'PLACEHOLDER OPCO LTD', reason: 'no company number given, and 2 companies match the name' },
+        { name: 'Placeholder Twin Limited', owner_of: 'PLACEHOLDER OPCO LTD', reason: 'no company number given, and 2 companies match the name', psc_url: 'https://find-and-update.company-information.service.gov.uk/company/ZZ000020/persons-with-significant-control' },
       ],
     },
   },
