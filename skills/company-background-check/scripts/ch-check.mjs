@@ -730,6 +730,22 @@ async function historicalFilingItems(num) {
   if (!historicalFilings.has(num)) historicalFilings.set(num, get(`/company/${num}/filing-history?items_per_page=100`, { optional: true }));
   return historicalFilings.get(num);
 }
+function hasPscFilingCorrection(filing) {
+  const annotations = Array.isArray(filing.annotations) ? filing.annotations : [];
+  const associated = Array.isArray(filing.associated_filings) ? filing.associated_filings : [];
+  return [filing, ...annotations, ...associated].some(item => {
+    if (!item) return false;
+    if (/^(?:LL\s*)?RP(?:01|02[AB]|04|08)[A-Z0-9]*$/i.test(item.type || '')) return true;
+    const marker = [item.description, item.annotation, item.description_values?.description]
+      .filter(value => typeof value === 'string').join(' ').replace(/[-_]/g, ' ');
+    return /\b(?:admin(?:istratively)? removed|administrative removal|removed from (?:the )?(?:public )?register|information not on (?:the )?register|rectified|rectification|replacement filing|second filing|(?:document|filing) (?:has been|was) replaced)\b/i.test(marker);
+  });
+}
+function pscFilingUrl(num, filing) {
+  const historyUrl = `${SITE}/company/${num}/filing-history`;
+  const id = filing.transaction_id || /\/filing-history\/([A-Za-z0-9_-]+)$/.exec(filing.links?.self || '')?.[1];
+  return typeof id === 'string' && id ? `${historyUrl}/${encodeURIComponent(id)}/document` : historyUrl;
+}
 async function historicalOwnerNumber(owner, asOf) {
   const registration = companyNumberKey(owner.identification?.registration_number);
   if (registration) {
@@ -774,11 +790,19 @@ async function datedPaths(start, asOf, gaps) {
       const history = await historicalFilingItems(num);
       const historyTotal = history?.total_count ?? history?.total_results;
       if (!history || !Array.isArray(history.items) || history.items.some(item => !item || typeof item !== 'object' || Array.isArray(item)) || !Number.isInteger(historyTotal) || historyTotal !== history.items.length || (history.start_index !== undefined && history.start_index !== 0)) { gap('PSC filing history unavailable or incomplete', `${SITE}/company/${num}/filing-history`); continue; }
-      const changes = history.items.filter(f => /^(?:LL)?PSC0[56]$/i.test(f.type || ''));
       const aliases = [owner.name, match.candidate.company_name, ...(Array.isArray(match.candidate.previous_company_names) ? match.candidate.previous_company_names : []).map(n => n?.name)].filter(n => typeof n === 'string').map(canonName);
+      const changes = history.items.filter(f => {
+        if (!/^(?:(?:LL\s*)?RP0[14])?(?:LL\s*)?PSC0[56]$/i.test(f.type || '')) return false;
+        const name = f.description_values?.psc_name;
+        return typeof name !== 'string' || !name || aliases.includes(canonName(name));
+      });
+      const correctedChange = changes.find(hasPscFilingCorrection);
+      if (correctedChange) {
+        gap('PSC control change filing was removed, rectified or has an unresolved replacement', pscFilingUrl(num, correctedChange));
+        continue;
+      }
       const uncertainChange = changes.find(f => {
         const name = f.description_values?.psc_name, change = f.description_values?.change_date;
-        if (name && typeof name === 'string' && !aliases.includes(canonName(name))) return false;
         return typeof name !== 'string' || !name || !validDate(change) || change > asOf || change < owner.notified_on || (owner.ceased_on && change >= owner.ceased_on);
       });
       if (uncertainChange) { gap(`PSC control change${uncertainChange.description_values?.change_date ? ` dated ${uncertainChange.description_values.change_date}` : ''} cannot be established at the relevant date`, `${SITE}/company/${num}/filing-history`); continue; }
