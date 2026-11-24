@@ -42,6 +42,8 @@ Label this route "Indexed filing text; original document not inspected". Do not 
 
 Separate active corporate controllers, minority shareholders, ceased controllers, advisers and commercial partners. A corporate PSC holding more than 25% but no more than 50% is not automatically a parent; require evidence of control, such as majority voting rights, board-appointment rights or accounts identifying a parent. Follow confirmed control links and record their basis and effective dates.
 
+PSC entries can describe indirect rights. Call the relationship inferred unless documentary evidence confirms it. Name an immediate parent only when the evidence establishes that step in the chain.
+
 Treat cessation of PSC status as the end of that declared control, not proof every share was sold. Ownership bands are not exact percentages or a full cap table. If reported dilution conflicts with PSC bands, report the discrepancy and request the current shareholder register and fully diluted cap table. Say "No current corporate parent identified in the records checked" when appropriate; do not rule out wider relationships.
 
 ## Validate credibility claims at their actual scope

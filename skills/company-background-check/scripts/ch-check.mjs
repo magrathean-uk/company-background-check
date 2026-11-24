@@ -36,7 +36,27 @@ const IR35_SMALL = { turnover: 15_000_000, balance_sheet_total: 7_500_000, emplo
 const USER_AGENT = 'company-background-check/1.0.0 (+https://github.com/terdelyi/company-background-check)';
 // tests set this to 0 so the pauses between public requests don't slow them down
 const PUBLIC_DELAY_MS = Number(process.env.PUBLIC_DELAY_MS ?? 1000);
-const UK_REGISTER = /england|wales|scotland|northern ireland|united kingdom|great britain|\buk\b|companies house|registrar of companies/i;
+// Accept specific UK jurisdictions and UK-qualified registers only; an unqualified registrar
+// or a UK-looking number can belong to a different country's register.
+const UK_JURISDICTION = '(?:england(?:\\s*(?:and|&)\\s*wales)?|wales|scotland|northern ireland|united kingdom|great britain|uk|u\\.k\\.)';
+const UK_REGISTER = new RegExp(`^(?:${[
+  UK_JURISDICTION,
+  `companies house(?:,?\\s+(?:${UK_JURISDICTION}|(?:cardiff|edinburgh|belfast)(?:,?\\s+${UK_JURISDICTION})?))?`,
+  `${UK_JURISDICTION}\\s+(?:register|registrar) of companies`,
+  `registrar of companies,?\\s+(?:for\\s+)?${UK_JURISDICTION}`,
+].join('|')})$`, 'i');
+const UK_GOVERNING_LAW = /^(?:the\s+)?(?:(?:uk|united kingdom)\s+companies act(?:\s+\d{4})?|companies act\s+(?:1985|2006)|limited liability partnerships act 2000)$/i;
+function registerIssue(ident) {
+  const locations = [ident.country_registered, ident.place_registered].map(value => value?.trim()).filter(Boolean);
+  const unresolved = locations.find(value => !UK_REGISTER.test(value));
+  if (unresolved) return `UK register not established (${unresolved})`;
+  if (locations.length) return null;
+  // Governing law is a fallback for entries that omit the registration fields.
+  const authority = ident.legal_authority?.trim();
+  if (!authority) return 'register not stated';
+  if (UK_REGISTER.test(authority) || UK_GOVERNING_LAW.test(authority)) return null;
+  return `UK register not established (governing law is ${authority})`;
+}
 // iXBRL concept names by local name, preferred first; older UK GAAP filings use the later ones
 const ACCOUNT_CONCEPTS = {
   net_assets: ['NetAssetsLiabilities', 'NetAssetsLiabilitiesIncludingPensionAssetLiability', 'Equity', 'ShareholderFunds'],
@@ -490,12 +510,13 @@ const parentQueue = [{ items: psc?.items, level: 1, ownerOf: c.company_name, own
 while (parentQueue.length) {
   const { items, level, ownerOf, ownerOfNumber } = parentQueue.shift();
   for (const owner of (items || []).filter(isOrganisationPsc)) {
-    const ident = owner.identification || {}, register = ident.country_registered || ident.place_registered || ident.legal_authority;
+    const ident = owner.identification || {};
     let parentNumber = companyNumberKey(ident.registration_number), matchedBy;
     const notFollowed = reason => parentsNotFollowed.push({ name: owner.name, owner_of: ownerOf, reason, psc_url: pscUrl(ownerOfNumber) });
     const controlGap = parentControlGap(owner);
     if (controlGap) { notFollowed(controlGap); continue; }
-    if (!UK_REGISTER.test(register || '')) { notFollowed(register ? `registered in ${register}` : 'register not stated'); continue; }
+    const registerGap = registerIssue(ident);
+    if (registerGap) { notFollowed(registerGap); continue; }
     // UK owners are often recorded without a number. Live UK companies can't share a name, so an exact match is the owner.
     if (!parentNumber) {
       const matches = (await searchCompanies(owner.name)).filter(i => i.company_status !== 'dissolved' && bareName(i.title) === bareName(owner.name));
@@ -640,10 +661,9 @@ async function inTargetGroup(num, depth = 0) {
       groupOwnershipNotFollowed.set(`${num}:${owner.name}:${controlGap}`, { name: owner.name, owner_of: num, reason: controlGap, psc_url: pscUrl(num) });
       continue;
     }
-    // An explicit foreign register cannot identify a UK company, even if its number or name matches.
-    const register = owner.identification?.country_registered || owner.identification?.place_registered;
-    if (register && !UK_REGISTER.test(register)) {
-      const reason = `registered in ${register}`;
+    // Match the registration namespace before looking up a PSC by number or name.
+    const reason = registerIssue(owner.identification || {});
+    if (reason) {
       groupOwnershipNotFollowed.set(`${num}:${owner.name}:${reason}`, { name: owner.name, owner_of: num, reason, psc_url: pscUrl(num) });
       continue;
     }

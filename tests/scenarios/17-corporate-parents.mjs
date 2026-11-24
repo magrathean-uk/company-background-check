@@ -26,7 +26,8 @@ export default {
       'company.parents.2.level': 3,
       'meta.parents_not_followed': [
         { name: 'Placeholder Former Owner Limited', owner_of: 'PLACEHOLDER SUBSIDIARY LTD', reason: 'PSC ceased on 2020-01-01', psc_url: 'https://find-and-update.company-information.service.gov.uk/company/ZZ000017/persons-with-significant-control' },
-        { name: 'Placeholder Overseas BV', owner_of: 'PLACEHOLDER MIDCO LTD', reason: 'registered in Netherlands', psc_url: 'https://find-and-update.company-information.service.gov.uk/company/ZZ000171/persons-with-significant-control' },
+        { name: 'Placeholder Overseas BV', owner_of: 'PLACEHOLDER MIDCO LTD', reason: 'UK register not established (Registrar of Companies, Hong Kong)', psc_url: 'https://find-and-update.company-information.service.gov.uk/company/ZZ000171/persons-with-significant-control' },
+        { name: 'Placeholder Overseas BV', owner_of: 'PLACEHOLDER TOPCO PLC', reason: 'UK register not established (governing law is Companies Act)', psc_url: 'https://find-and-update.company-information.service.gov.uk/company/ZZ000172/persons-with-significant-control' },
         { name: 'Placeholder Beyond Limited', owner_of: 'PLACEHOLDER ULTIMATE LTD', reason: 'more than 3 levels up', psc_url: 'https://find-and-update.company-information.service.gov.uk/company/ZZ000173/persons-with-significant-control' },
       ],
     },
@@ -41,10 +42,13 @@ export default {
     }),
     '/officers/OFF-ALPHA2/appointments': list(appointment('ZZ000017', 'PLACEHOLDER SUBSIDIARY LTD')),
     ...companyRoutes(midco, {
-      pscs: [corporatePsc('Placeholder Topco Plc', 'ZZ000172', 'England and Wales'), corporatePsc('Placeholder Overseas BV', 'ZZ000172', 'Netherlands', { identification: { registration_number: 'ZZ000172', country_registered: 'Netherlands', legal_authority: 'Companies House' } })],
+      pscs: [corporatePsc('Placeholder Topco Plc', 'ZZ000172', 'England and Wales'), corporatePsc('Placeholder Overseas BV', 'ZZ000172', 'Netherlands', { identification: { registration_number: 'ZZ000172', place_registered: 'Registrar of Companies, Hong Kong' } })],
     }),
     ...companyRoutes(topco, {
-      pscs: [corporatePsc('Placeholder Ultimate Limited', 'ZZ000173', 'United Kingdom')],
+      pscs: [
+        corporatePsc('Placeholder Overseas BV', 'ZZ000173', undefined, { identification: { registration_number: 'ZZ000173', legal_authority: 'Companies Act' } }),
+        corporatePsc('Placeholder Ultimate Limited', 'ZZ000173', undefined, { identification: { registration_number: 'ZZ000173', place_registered: 'UK Register Of Companies', legal_authority: 'Private company incorporated under UK law' } }),
+      ],
       insolvency: { cases: [{ type: 'creditors-voluntary-liquidation' }] },
     }),
     ...gazetteSearch('PLACEHOLDER TOPCO', [
