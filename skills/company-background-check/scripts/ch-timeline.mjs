@@ -6,11 +6,14 @@ const date = value => {
   return Number.isFinite(d.valueOf()) && d.toISOString().slice(0, 10) === value ? value : null;
 };
 const transactionId = path => typeof path === 'string' ? path.match(/\/filing-history\/([^/?#]+)/)?.[1] || null : null;
+const transactionKey = tx => transactionId(tx.links?.filing) || tx;
 const removed = f => (f.annotations || []).some(a => /\b(remov(?:ed|al)|rectif(?:ied|ication)|expunged|replaced)\b/i.test(`${a.description || ''} ${a.annotation || ''}`));
 const creationTx = t => /^(?:MR01|create-charge-with(?:out)?-deed)$/i.test(t.filing_type || '');
 const satisfactionTx = t => /^(?:MR04|satisfy-charge-(?:full|part))$/i.test(t.filing_type || '');
+const satisfactionFiling = f => f.type === 'MR04' || /^mortgage-satisfy-charge/.test(f.description || '');
 const filingExtent = value => /satisfy-charge-full/i.test(value || '') ? ' in full' : /satisfy-charge-part/i.test(value || '') ? ' in part' : '';
 const registerExtent = status => /^(?:satisfied|fully-satisfied)$/.test(status || '') ? ' in full' : status === 'part-satisfied' ? ' in part' : '';
+const compatibleExtents = (a, b) => !a || !b || a === b;
 const replacement = f => /^(RP01|RP04)$/i.test(f.type || '') || /(?:^|-)(?:second|replacement|replaced|corrected)(?:-|$)/i.test(f.description || '');
 
 export function buildTimeline({ accounts, confirmationStatement, number, filings, charges, today = new Date().toISOString().slice(0, 10) }) {
@@ -55,6 +58,24 @@ export function buildTimeline({ accounts, confirmationStatement, number, filings
   const keyFor = c => c.charge_code || (c.charge_number != null ? String(c.charge_number) : c.id || c.links?.self || null);
   const detail = c => c?.links?.self ? SITE + c.links.self : `${profileUrl}/charges`;
   const chargeEvents = new Set(), handledTransactions = new Set(), removedTransactions = new Set(), partialCharges = new Set();
+  const statusFromFiling = new Set();
+  const findTransaction = (f, charge, kind) => {
+    const transactions = charge?.transactions || [];
+    const linked = other => other.transaction_id && transactions.find(t => transactionId(t.links?.filing) === other.transaction_id);
+    const direct = linked(f), filedOn = date(f.date);
+    if (direct || kind !== 'charge_satisfied' || !filedOn) return direct;
+
+    // Without a link, require a unique pairing by charge, filing date and compatible extent.
+    const matches = transactions.filter(t => satisfactionTx(t) && !t.links?.filing
+      && date(t.delivered_on) === filedOn && compatibleExtents(filingExtent(f.description), filingExtent(t.filing_type)));
+    if (matches.length !== 1) return null;
+    const match = matches[0];
+    const competing = items.some(other => other !== f && (!f.transaction_id || other.transaction_id !== f.transaction_id)
+      && satisfactionFiling(other) && date(other.date) === filedOn
+      && !replacement(other) && !removed(other) && compatibleExtents(filingExtent(other.description), filingExtent(match.filing_type))
+      && !linked(other) && chargeFor(other) === charge);
+    return competing ? null : match;
+  };
   // Prefer the earliest processed original when duplicate dated officer filings exist.
   const orderedItems = [...items].sort((a, b) => (date(a.date) || '9999').localeCompare(date(b.date) || '9999'));
   for (const f of orderedItems) {
@@ -65,7 +86,7 @@ export function buildTimeline({ accounts, confirmationStatement, number, filings
     if (relevant && ((f.annotations || []).length || (f.associated_filings || []).length)) limits.add('Some relevant filings have annotations or associated filings; check for corrections before relying on them.');
     let kind, summary, effective, extra = {}, identity = f.transaction_id ? `filing:${f.transaction_id}` : `filing:${JSON.stringify(f)}`;
     if (/^mortgage-create/.test(d) || type === 'MR01') { kind = 'charge_created'; summary = 'Charge created'; effective = v.charge_creation_date; }
-    else if (/^mortgage-satisfy-charge/.test(d) || type === 'MR04') { kind = 'charge_satisfied'; effective = v.mortgage_satisfaction_date; }
+    else if (satisfactionFiling(f)) { kind = 'charge_satisfied'; effective = v.mortgage_satisfaction_date; }
     else if ((/^appoint-.*director/.test(d) || /^(AP01|AP02)$/.test(type))) { kind = 'director_appointed'; summary = `Director appointed${v.officer_name ? `: ${v.officer_name}` : ''}`; effective = v.appointment_date; }
     else if (/^termination-.*director/.test(d) || type === 'TM01') { kind = 'director_terminated'; summary = `Director terminated${v.officer_name ? `: ${v.officer_name}` : ''}`; effective = v.termination_date; }
     else if (/^notification-of-a-(?:person|super-secure-person)-with-significant-control(?:-|$)/.test(d) && !/statement/.test(d) || /^PSC0[1-3]$/.test(type)) { kind = 'psc_notified'; summary = `Person with significant control notified${v.psc_name ? `: ${v.psc_name}` : ''}`; effective = v.notification_date; }
@@ -76,8 +97,9 @@ export function buildTimeline({ accounts, confirmationStatement, number, filings
     if ((kind === 'director_appointed' || kind === 'director_terminated') && date(effective) && v.officer_name?.trim()) identity = `${kind}:${date(effective)}:${v.officer_name.trim().replace(/\s+/g, ' ').toUpperCase()}`;
     let filed = f.date, url = filingUrl(f);
     if (kind.startsWith('charge_')) {
-      const c = chargeFor(f), key = c ? keyFor(c) : v.charge_number != null ? String(v.charge_number).replace(/\s/g, '').toUpperCase() : null, transaction = c?.transactions?.find(t => transactionId(t.links?.filing) === f.transaction_id);
-      if (transaction && f.transaction_id) handledTransactions.add(f.transaction_id);
+      const c = chargeFor(f), key = c ? keyFor(c) : v.charge_number != null ? String(v.charge_number).replace(/\s/g, '').toUpperCase() : null;
+      const transaction = findTransaction(f, c, kind);
+      if (transaction) handledTransactions.add(transactionKey(transaction));
       if (key) extra.charge_code = c?.charge_code || key;
       if (c?.persons_entitled?.length) extra.lenders = c.persons_entitled.map(p => p.name).filter(Boolean);
       if (c) extra.register_url = detail(c);
@@ -93,16 +115,18 @@ export function buildTimeline({ accounts, confirmationStatement, number, filings
         if (!date(effective) && satisfiedOn && (!date(filed) || filed >= satisfiedOn)) {
           const statusExtent = registerExtent(c.status);
           const transactions = (c.transactions || []).filter(satisfactionTx);
-          const compatible = !extent || !statusExtent || extent === statusExtent;
-          const exact = extent && extent === statusExtent && transactionExtent === extent
-            && transactions.filter(tx => filingExtent(tx.filing_type) === extent).length === 1;
+          const exact = transaction && extent && extent === statusExtent
+            && compatibleExtents(transactionExtent, extent)
+            && transactions.filter(tx => transactionExtent ? filingExtent(tx.filing_type) === extent
+              : compatibleExtents(filingExtent(tx.filing_type), extent)).length === 1;
           // Match the register date to the same stage of satisfaction.
-          if (compatible && (exact || transactions.length <= 1)) {
+          if (compatibleExtents(extent, statusExtent) && (exact || transactions.length <= 1)) {
             effective = satisfiedOn;
             extent ||= statusExtent;
           }
         }
         summary = `Charge satisfied${extent}`;
+        if (c && extent && extent === registerExtent(c.status)) statusFromFiling.add(c);
         if (key && extent === ' in part') partialCharges.add(key);
         if (key && date(effective)) identity = `${kind}:${key}:${effective}:${summary}`;
       }
@@ -114,20 +138,21 @@ export function buildTimeline({ accounts, confirmationStatement, number, filings
     const key = keyFor(c), txs = c.transactions || [], lenders = (c.persons_entitled || []).map(p => p.name).filter(Boolean);
     const emit = (kind, effective, transaction, summary) => {
       const tid = transactionId(transaction?.links?.filing);
-      if (tid && (handledTransactions.has(tid) || removedTransactions.has(tid))) return;
+      if ((transaction && handledTransactions.has(transactionKey(transaction))) || (tid && removedTransactions.has(tid))) return;
       if (kind === 'charge_created' && key && chargeEvents.has(`${kind}:${key}`)) return;
       if (kind === 'charge_satisfied' && key && date(effective) && events.some(e => e.kind === kind && e.charge_code === key && e.effective_date === date(effective) && e.summary === summary)) return;
       const id = transactionId(transaction?.links?.filing), extra = { ...(key && { charge_code: c.charge_code || key }), ...(lenders.length && { lenders }) };
       if (kind === 'charge_created') extra.document_url = pdf(id);
       if (kind === 'charge_satisfied' && id) extra.register_url = detail(c);
-      add({ kind, summary, effective_date: effective, filed_date: transaction?.delivered_on || (kind === 'charge_created' ? c.delivered_on : null), due_date: null, url: kind === 'charge_satisfied' && id ? pdf(id) : detail(c), ...extra }, `register:${kind}:${key || JSON.stringify(c)}:${id || effective || ''}`);
+      const source = id || (transaction && `${transaction.filing_type}:${date(transaction.delivered_on) || ''}`) || effective || '';
+      add({ kind, summary, effective_date: effective, filed_date: transaction?.delivered_on || (kind === 'charge_created' ? c.delivered_on : null), due_date: null, url: kind === 'charge_satisfied' && id ? pdf(id) : detail(c), ...extra }, `register:${kind}:${key || JSON.stringify(c)}:${source}`);
     };
     emit('charge_created', c.created_on, txs.find(creationTx), 'Charge created');
     if (c.satisfied_on || /satisfied/.test(c.status || '') || txs.some(satisfactionTx)) {
       const satisfactionTxs = txs.filter(satisfactionTx);
       const extentOf = tx => filingExtent(tx.filing_type);
       const suffix = registerExtent(c.status);
-      const pending = satisfactionTxs.filter(tx => !handledTransactions.has(transactionId(tx.links?.filing)) && !removedTransactions.has(transactionId(tx.links?.filing)));
+      const pending = satisfactionTxs.filter(tx => !handledTransactions.has(transactionKey(tx)) && !removedTransactions.has(transactionId(tx.links?.filing)));
       const compatible = pending.filter(tx => extentOf(tx) && extentOf(tx) === suffix);
       const unknown = pending.filter(tx => !extentOf(tx));
       const canMatchUnknown = compatible.length === 0 && unknown.length === 1
@@ -138,10 +163,10 @@ export function buildTimeline({ accounts, confirmationStatement, number, filings
       for (const tx of pending) {
         const extent = extentOf(tx) || (tx === datedMatch ? suffix : '');
         if (tx !== datedMatch) limits.add('A charge satisfaction transaction has no individual effective date; check the filing.');
-        emit('charge_satisfied', tx === datedMatch ? c.satisfied_on : null, tx, tx === datedMatch ? `Charge satisfied${extent}` : `Charge satisfaction recorded${extent}`);
+        emit('charge_satisfied', tx === datedMatch ? satisfiedOn : null, tx, tx === datedMatch ? `Charge satisfied${extent}` : `Charge satisfaction recorded${extent}`);
       }
-      if (c.satisfied_on && !datedMatch) emit('charge_satisfied', c.satisfied_on, null, `Charge satisfied${suffix}`);
-      else if (!satisfactionTxs.length && !c.satisfied_on) emit('charge_satisfied', null, null, `Charge satisfied${suffix}`);
+      if (satisfiedOn && !datedMatch) emit('charge_satisfied', satisfiedOn, null, `Charge satisfied${suffix}`);
+      else if (!satisfactionTxs.length && !satisfiedOn && !statusFromFiling.has(c)) emit('charge_satisfied', null, null, `Charge satisfied${suffix}`);
     }
   }
   for (const [record, kind, summary] of [[accounts, 'accounts_overdue', 'Accounts overdue'], [confirmationStatement, 'confirmation_overdue', 'Confirmation statement overdue']]) {
