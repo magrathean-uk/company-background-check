@@ -1,5 +1,6 @@
 #!/usr/bin/env node
 // Companies House background check. Node 18+, no dependencies.
+import { buildTimeline } from './ch-timeline.mjs';
 // Usage: COMPANIES_HOUSE_API_KEY=... node ch-check.mjs "<company number or name>" [--aka "Brand, Product name"]
 // Exit: 0 = JSON report on stdout | 2 = no key / API unreachable | 3 = ambiguous name (candidates on stdout)
 // Skill evals run without network, so they answer requests from the repo's test fixtures instead.
@@ -276,13 +277,23 @@ const isSolventWindUp = cases => Array.isArray(cases) && cases.length > 0 && cas
 const insolvencyStart = cases => (cases || []).flatMap(x => x.dates || [])
   .filter(d => d.date && !/ended|concluded|dissolved|discharged|terminated/.test(d.type || '')).map(d => d.date).sort()[0] || null;
 
+function accountsStatus(company) {
+  const accounts = company.accounts;
+  return {
+    last_made_up_to: accounts?.last_accounts?.period_end_on || accounts?.last_accounts?.made_up_to || null,
+    next_due: accounts?.next_accounts?.due_on || accounts?.next_due || null,
+    overdue: Boolean(accounts?.next_accounts?.overdue ?? accounts?.overdue),
+  };
+}
+
 // Register checks that matter for any company in the group: the target and each parent.
 function registerFlags(co, num, insolvency, filingItems) {
   const out = [], add = (severity, code, text, url = `${SITE}/company/${num}`) => out.push({ severity, code, text, url });
   const filingsUrl = `${SITE}/company/${num}/filing-history`;
   const solvent = isSolventWindUp(insolvency?.cases);
+  const accounts = accountsStatus(co);
   if (co.company_status !== 'active') add('high', 'status', `Company status is "${co.company_status}"${solvent ? ' (members\' voluntary liquidation: a solvent wind-up, the company is still closing)' : ''}`);
-  if (co.accounts?.overdue) add('high', 'accounts_overdue', `Accounts overdue (were due ${co.accounts.next_due || 'unknown'})`);
+  if (accounts.overdue) add('high', 'accounts_overdue', `Accounts overdue (were due ${accounts.next_due || 'unknown'})`);
   if (co.confirmation_statement?.overdue) add('medium', 'confirmation_overdue', `Confirmation statement overdue (was due ${co.confirmation_statement.next_due || 'unknown'})`);
   if (!solvent && (co.has_insolvency_history || insolvency?.cases?.length)) add('high', 'insolvency', `Insolvency history: ${(insolvency?.cases || []).map(x => x.type).join(', ') || 'yes'}`, `${SITE}/company/${num}/insolvency`);
   if (co.registered_office_is_in_dispute) add('high', 'office_disputed', 'Registered office address is in dispute');
@@ -965,15 +976,17 @@ flags.sort((a, b) => order[a.severity] - order[b.severity]);
 const DIRECTOR_RECORD = /^(phoenix_|company_cycling$|director_insolvencies$|serial_dissolutions$|failed_company_tribunals$|disqualification$)/;
 for (const f of flags) f.record = f.code.startsWith('parent_') ? 'parent' : DIRECTOR_RECORD.test(f.code) ? 'director' : 'own';
 const paymentPracticeReports = await paymentPracticesPending;
+const accounts = accountsStatus(c);
 console.log(JSON.stringify({
   checked_at: new Date().toISOString().slice(0, 10),
   company: {
     name: c.company_name, number, also_known_as: aka, status: c.company_status, type: c.type, incorporated: c.date_of_creation, age_months: ageMonths === null ? null : Math.round(ageMonths),
     registered_office: Object.values(c.registered_office_address || {}).join(', '), sic_codes: c.sic_codes || [],
     previous_names: (c.previous_company_names || []).map(p => ({ name: p.name, until: p.ceased_on })),
-    accounts: { last_made_up_to: c.accounts?.last_accounts?.made_up_to || null, type: c.accounts?.last_accounts?.type || null, next_due: c.accounts?.next_due || null, overdue: !!c.accounts?.overdue,
+    accounts: { last_made_up_to: accounts.last_made_up_to, type: c.accounts?.last_accounts?.type || null, next_due: accounts.next_due, overdue: accounts.overdue,
       history: accountsHistory, going_concern_doubt: goingConcernDoubt },
     confirmation_statement: { next_due: c.confirmation_statement?.next_due || null, overdue: !!c.confirmation_statement?.overdue },
+    timeline: buildTimeline({ accounts, confirmationStatement: c.confirmation_statement, number, filings, charges }),
     outstanding_charges: outstandingCharges, charges: outstandingChargeItems, insolvency_cases: (insolv?.cases || []).map(x => x.type),
     gazette: { searched_names: gazette.searched_names, failed_searches: gazette.failed_searches, notices: gazette.notices },
     parents, gender_pay_gap: genderPayGap, sponsor_register: sponsorRegister,

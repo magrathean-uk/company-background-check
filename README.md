@@ -21,6 +21,7 @@ See the [ownership and control evidence panel](.github/sample-ownership.png) for
 - **Companies House:** status, filings, charges, insolvency history, directors and owners
 - **Directors and owners:** phoenix companies, companies opened and closed in quick succession, and the disqualified directors register
 - **Accounts:** net assets, short-term debts, cash, headcount and turnover for up to five years, and going-concern warnings. Accounts filed as PDF are read by the agent, scanned ones too on macOS
+- **Events after the accounts:** a source-linked timeline of material changes since the latest accounts year-end, including lender security, funding, director and control changes, missed filings and reported redundancies
 - **Corporate owners:** current controlling parents followed up to the UK parent, with minority and historical interests kept separate
 - **The Gazette:** winding-up petitions and other insolvency notices
 - **Employer registers:** employment tribunal decisions, gender pay gap filings, the visa sponsor register and payment practice reports

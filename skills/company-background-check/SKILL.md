@@ -50,6 +50,8 @@ The JSON has `company`, `directors` (active directors plus individual owners who
 
 `company.accounts.history` holds up to five years of accounts, newest first: net assets, net current assets, cash, average employees, turnover, profit and staff costs where the filing tagged them, `payroll_months_in_cash` (cash divided by a month of staff costs), and `format` (`ixbrl`, `pdf` or `unavailable`). The script only reads iXBRL. For the latest year, and for the year before it when the latest has no comparatives, read any `pdf` year as in "Reading PDF accounts" below: the same four figures and the going-concern note. Apply the accounts rules below to what you read, and say in "Not checked and limits" which years were read by hand.
 
+`company.timeline` supplies Companies House events, evidence links and coverage limits from the records returned. Check its dates and sources, inspect charge documents, and add material events from step 2 using [Material events after the accounts](references/evidence-and-funding.md#material-events-after-the-accounts). Put the combined timeline under Company record.
+
 `company.gazette` holds the corporate insolvency notices from The Gazette in the last five years that carry this company's number. A petition to wind up appears there weeks before Companies House shows anything, so the script flags one from the last 24 months as high and any other notice as medium. `meta.gazette_name_only` lists notices that matched a name but not the number: open each, and treat it as this company's only if the address or a director's name confirms it, then rate it as the script would and say you did so by hand. If `company.gazette.failed_searches` is not empty, search The Gazette by hand for those names and note it in "Not checked and limits".
 
 `company.parents` follows active corporate PSCs with explicit majority share or voting control, or board-appointment control, up to three levels. This is an inferred control chain, not a complete shareholder register or proof of a parent's financial guarantee. Each inferred parent gets the register and Gazette checks but not the director checks, and its findings come back as flags prefixed `parent_` with the same severity. Present each one as the parent's, never the employer's own: "Parent {name}: …". Owners recorded without a company number are found by an exact name search and marked `matched_by: "name"`: say so in "Not checked and limits".
@@ -101,7 +103,7 @@ Some environments block outbound API calls. The same data is on the public Compa
 2. Read the overview (status, incorporation date, accounts and confirmation statement due dates, previous names), then the People, Filing history, Charges and Insolvency tabs. Open the latest two sets of accounts from the filing history, read them as in "Reading PDF accounts" and apply the accounts rules above. Search thegazette.co.uk for corporate insolvency notices under each current and previous name, and rate the ones that show the company number as the script does: a petition to wind up in the last 24 months is high, any other insolvency notice from the last five years is medium.
 3. Record each corporate PSC's control basis and whether it is current or ceased. Follow a UK corporate owner as an inferred parent only when majority or board control is supported, checking its status, filings, insolvency and Gazette notices up to three levels. Keep minority, former and uncertain relationships separate; do not treat their findings as the employer's or an inferred parent's. For a cycling exclusion, check the PSC pages and filings on both sides for evidence of control at the related company's closure. Keep the related company in the check and record the gap if the date or any necessary link is unclear.
 4. Open the appointments page of each active director and of each individual owner (find owners with the officer search, matching name and birth month), and apply the phoenix test below by hand.
-5. Record in "Not checked and limits" that path B was used and what could not be opened.
+5. Build the timeline from the overview, filing history, charges and people pages using [Material events after the accounts](references/evidence-and-funding.md#material-events-after-the-accounts). Work back to the latest filed accounts year-end and record any pages or relevant documents you could not inspect. Record that path B was used in "Not checked and limits".
 
 ### What counts as a phoenix pattern
 
@@ -141,7 +143,7 @@ Run these searches (in parallel where possible), look back about five years, and
 | Topic | Search for | Capture |
 |---|---|---|
 | Funding and investment | `<name> funding round raised investment`, `<name> acquired acquisition investors` | Event and publication dates, currency, amount, round versus cumulative total, announced/closed/estimated status, investors or acquirer, original source |
-| Redundancies | `<name> redundancies layoffs job cuts`, `<name> restructuring`, then `<name> job cuts <year>` for each of the last five years the first results do not cover | Every round in the last five years, newest first: date, what happened, how many or what share of staff. Add any year-on-year fall in average employees from the accounts history |
+| Redundancies | `<name> redundancies layoffs job cuts`, `<name> restructuring`, then `<name> job cuts <year>` for each of the last five years the first results do not cover | Every round in the last five years, newest first: event and publication dates, proposed or completed, what happened, how many or what share of staff. Add any year-on-year fall in average employees from the accounts history |
 | Media coverage | `<name> news`, `<name> <CEO or founder name>` | Up to 8 items: date, outlet, headline, tone |
 | Legal and financial trouble | `<name> administration insolvency winding up`, `<name> employment tribunal`, `<name> The Gazette notice`, `<name> lawsuit fine investigation` | Tribunal decisions, winding-up petitions, regulator action, unpaid wages or other money owed to staff |
 | Unpaid pensions | Search the company's name on the Pensions Regulator's published penalty notices and court orders (https://www.thepensionsregulator.gov.uk/en/document-library/enforcement-activity/penalty-notices) and `<name> pensions regulator penalty` | A named entry that matches the company's name and town is a medium flag under Legal and insolvency notices, linked to the notice |
@@ -237,6 +239,14 @@ Under the table, one short paragraph per point, in everyday words, for the lates
 - **Missing figures:** which figures the accounts do not show, and the year's profit or loss if it can be read from the notes.
 
 Avoid "revaluation reserve", "net current liabilities", "retained profit" and "profit and loss account" here. The plain sentence carries the meaning.
+
+**Material events after the accounts**
+
+State the accounts year-end, then list material events oldest first. Label effective dates, filing dates, publication dates and deadlines. Follow the [timeline guidance](references/evidence-and-funding.md#material-events-after-the-accounts) for missing dates, charge documents and the empty case.
+
+| Date | Event | Other dates | Evidence |
+|---|---|---|---|
+| {D Mon YYYY and date type} | {one short sourced statement} | {other known dates, labelled} | [{source}]({url}) |
 
 ## 3. Directors and owners
 
