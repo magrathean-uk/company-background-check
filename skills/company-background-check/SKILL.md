@@ -46,7 +46,7 @@ Fill in `--aka` before the first run. Companies House only knows registered name
 
 Exit codes: `0` JSON report on stdout, `2` no key or API unreachable (use path B), `3` ambiguous name (candidates on stdout, ask the user).
 
-The JSON has `company`, `directors` (active directors plus individual owners who are not directors, each with a `role`), `pscs`, `flags` (already sorted by severity, each with an evidence URL and a `record` of `own`, `parent` or `director` saying whose record it comes from) and `meta` (caps hit, caveats). If `meta.people_without_officer_record` names anyone, the script found no officer record for that owner, so check their other companies by hand as in Path B step 3. Use the flags as given; add context, do not upgrade or drop them. There are two exceptions: the trading-name check below can raise a phoenix rating, and a tribunal decision you have read can raise a tribunal lead.
+The JSON has `company`, `directors` (active directors plus individual owners who are not directors, each with a `role`), `pscs`, `flags` (already sorted by severity, each with an evidence URL and a `record` of `own`, `parent` or `director` saying whose record it comes from) and `meta` (caps hit, caveats). If `meta.people_without_officer_record` names anyone, the script found no officer record for that owner, so check their other companies by hand as in Path B step 3. Use the script flags with source-linked context. Change a flag only where a specific rule below calls for it. Link the evidence for any change, including the judgment when a court outcome changes the rating.
 
 `company.accounts.history` holds up to five years of accounts, newest first: net assets, net current assets, cash, average employees, turnover, profit and staff costs where the filing tagged them, `payroll_months_in_cash` (cash divided by a month of staff costs), and `format` (`ixbrl`, `pdf` or `unavailable`). The script only reads iXBRL. For the latest year, and for the year before it when the latest has no comparatives, read any `pdf` year as in "Reading PDF accounts" below: the same four figures and the going-concern note. Apply the accounts rules below to what you read, and say in "Not checked and limits" which years were read by hand.
 
@@ -156,6 +156,8 @@ Run these searches (in parallel where possible), look back about five years, and
 **Review sites.** Glassdoor and LinkedIn have no public API and forbid scraping, so use only what search results and openly readable pages show. Report a rating only if a source states it; otherwise write "Not found". Never estimate one.
 
 **Funding evidence.** Do not add a cumulative total to rounds it may include, or count corrected filings as additional raises. Nominal share capital is not cash raised, valuation is not cash in the bank, and investor promotion does not establish a paid investment. Preserve conflicting amounts with their sources and dates. Treat paywall placeholders and retrieval failures as evidence limitations, not company misconduct. Directory listings, accelerator membership and a sound product concept do not establish revenue, security certification or a tested implementation; attribute each claim at its actual scope.
+
+**Targeted claim checks.** Read [Claim verification](references/claim-verification.md) when the user asks to verify funding, a named customer, a public contract or a regulatory claim, or when routine research finds one that could materially change the employment assessment. Check the relevant regulated activity if the business appears to carry it out. Follow only the relevant routes and use public sources. Put the evidence and its limits in the usual report.
 
 **Directors are people.** Report only their company roles and business press. Leave out home addresses, dates of birth, family and personal social media.
 
@@ -293,6 +295,8 @@ Put scope and evidence status in Event (for example, "Reported cumulative equity
 - **Visa sponsor:** {Licensed, with type and rating | Not on the current register}
 - **Size for IR35:** {Small | Not small | Probably small | Unknown}, with the figures it rests on and, for a group company, the group's size. Only when the reader is or may be a contractor
 
+After these items, add short linked findings for material customer, public contract or regulatory claims when checked. Give the entity, evidence date and what the source establishes. Keep the limits and next checks in sections 10 and 9.
+
 ## 9. Verify next
 
 1. {The check that would most change this picture, with a link to where to do it}
@@ -311,7 +315,7 @@ Put scope and evidence status in Event (for example, "Reported cumulative equity
 
 This section is for the reader. List the checks you could not complete that would most change the picture, most useful first, each with a link to where to do it. Three to five items. Include one question worth putting to the employer when there is one.
 
-When the risk is Medium or High, or the latest accounts show net liabilities, one item is always a search of the register of County Court Judgments on TrustOnline (https://www.trustonline.org.uk), noting the small fee. An unpaid judgment is one of the earliest public signs that a company cannot pay its bills, and no free source shows it. Never run that search yourself: paying for it is the user's call.
+Suggest an optional paid [TrustOnline](https://www.trustonline.org.uk) lookup for County Court Judgments (CCJs) only when public evidence shows material payment risk for the employer and the result could change the reader's decision. Examples include evidence of unpaid wages or supplier debts, persistently slow supplier payments, or a recent winding-up petition about an unpaid debt. Name and link the evidence that prompted the suggestion. An overall Medium or High rating or net liabilities alone is insufficient. State that the lookup costs a fee and leave it to the reader. Do not run it or contact anyone.
 
 The section is not a place for notes about this skill: if a run exposes a gap in the script or in these instructions, tell the user in the chat instead.
 
@@ -337,11 +341,11 @@ Statuses:
 - **Concern** - a high-severity finding in that area.
 - **Caution** - a medium-severity finding, or a named gap that matters (say which in the line).
 - **Clear** - checked, nothing adverse. Low and info flags are mentioned in the line but leave the area Clear.
-- **No data** - nothing to judge from. A search that found nothing is never Caution. For register checks (Gazette, tribunals, insolvency, redundancies) nothing found means nothing recorded, so the area is Clear. For media coverage and employee reviews, no results tell you nothing, so the area is No data.
+- **No data** - nothing to judge from. For routine register checks (Gazette, tribunals, insolvency, redundancies) an empty result means nothing was found in the records searched, so the area is Clear. For media coverage and employee reviews, no results tell you nothing, so the area is No data. Apply the Coverage rule below if an empty result leaves a decision-material question unresolved.
 
 The status and its line must agree: a line that explains a finding away cannot sit under Concern. Under Money, payroll cover under three months in the latest year is a named gap (Caution).
 
-For "Coverage of this check", give Caution for path B, stale data, caps hit or incomplete PSC records that affect a material finding. Give Concern when the registry could not be checked at all and Clear when the API path ran without material gaps. Every high flag shows as a Concern in its area. A `parent_` flag counts in the same area as the flag without the prefix, and the area's line names the parent.
+For "Coverage of this check", use Concern if the registry could not be checked at all. Otherwise use Caution for path B, stale data, caps hit or a named evidence gap that could change the decision, such as incomplete PSC records on a material ownership link. Use Clear when the API path ran and none of those limitations apply. Every high flag shows as a Concern in its area. A `parent_` flag counts in the same area as the flag without the prefix, and the area's line names the parent.
 
 ### Page shell
 
