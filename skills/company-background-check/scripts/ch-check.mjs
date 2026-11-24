@@ -27,6 +27,7 @@ const PARENT_CONTROLS = new Set([
   'right-to-appoint-and-remove-members-limited-liability-partnership',
 ]);
 const isOrganisationPsc = p => /^(?:corporate-entity-person|legal-person(?:-person)?)-with-significant-control$/.test(p.kind || '');
+const isOrganisationBeneficialOwner = p => /^(?:corporate-entity|legal-person)-beneficial-owner$/.test(p.kind || '');
 const parentControlGap = p => p.ceased_on ? `PSC ceased on ${p.ceased_on}`
   : (p.natures_of_control || []).some(control => PARENT_CONTROLS.has(control)) ? null : 'PSC record does not establish majority control';
 const PPR_BASE = process.env.PPR_BASE || 'https://check-payment-practices.service.gov.uk', PPR_SITE = 'https://check-payment-practices.service.gov.uk';
@@ -45,7 +46,7 @@ const UK_REGISTER = new RegExp(`^(?:${[
   `${UK_JURISDICTION}\\s+(?:register|registrar) of companies`,
   `registrar of companies,?\\s+(?:for\\s+)?${UK_JURISDICTION}`,
 ].join('|')})$`, 'i');
-const UK_GOVERNING_LAW = /^(?:the\s+)?(?:(?:uk|united kingdom)\s+companies act(?:\s+\d{4})?|companies act\s+(?:1985|2006)|limited liability partnerships act 2000)$/i;
+const UK_GOVERNING_LAW = /^(?:the\s+)?(?:(?:uk|united kingdom)\s+companies act(?:\s+\d{4})?|companies act\s+(?:1985|2006)|limited liability partnerships act 2000|companies\s+(?:act\s+)?\(?northern ireland\)?\s+(?:order\s+)?(?:1960|1986)|limited liability partnerships act\s+\(?northern ireland\)?\s+2002)$/i;
 function registerIssue(ident) {
   const locations = [ident.country_registered, ident.place_registered].map(value => value?.trim()).filter(Boolean);
   const unresolved = locations.find(value => !UK_REGISTER.test(value));
@@ -509,10 +510,11 @@ const pscUrl = num => `${SITE}/company/${num}/persons-with-significant-control`;
 const parentQueue = [{ items: psc?.items, level: 1, ownerOf: c.company_name, ownerOfNumber: number }];
 while (parentQueue.length) {
   const { items, level, ownerOf, ownerOfNumber } = parentQueue.shift();
-  for (const owner of (items || []).filter(isOrganisationPsc)) {
+  for (const owner of (items || []).filter(p => isOrganisationPsc(p) || isOrganisationBeneficialOwner(p))) {
     const ident = owner.identification || {};
     let parentNumber = companyNumberKey(ident.registration_number), matchedBy;
     const notFollowed = reason => parentsNotFollowed.push({ name: owner.name, owner_of: ownerOf, reason, psc_url: pscUrl(ownerOfNumber) });
+    if (isOrganisationBeneficialOwner(owner)) { notFollowed('registered beneficial owner, not a UK PSC'); continue; }
     const controlGap = parentControlGap(owner);
     if (controlGap) { notFollowed(controlGap); continue; }
     const registerGap = registerIssue(ident);
@@ -645,14 +647,18 @@ if (!activeDirs.length) flag('high', 'no_directors', 'No active directors on rec
 
 // A company in the target's own group closing (a subsidiary, or a sister under the same parent) is group housekeeping,
 // not a company cycled out from under its staff
-const groupOwnership = new Map(), groupOwnershipNotFollowed = new Map();
+const groupOwnership = new Map(), groupOwnershipNotFollowed = new Map(), groupPscs = new Map();
+const pscsOf = num => {
+  if (!groupPscs.has(num)) groupPscs.set(num, get(`/company/${num}/persons-with-significant-control?items_per_page=50`));
+  return groupPscs.get(num);
+};
 async function inTargetGroup(num, depth = 0) {
   if (seenInGroup.has(num)) return true;
   if (depth >= MAX_PARENT_LEVELS) return false;
   // A depth-limited miss on one route must not hide a shorter, confirmed route later.
   const cacheKey = `${num}:${depth}`;
   if (groupOwnership.has(cacheKey)) return groupOwnership.get(cacheKey);
-  const owners = (await get(`/company/${num}/persons-with-significant-control?items_per_page=50`))?.items || [];
+  const owners = (await pscsOf(num))?.items || [];
   let owned = false;
   for (const owner of owners) {
     if (!owner.name || !isOrganisationPsc(owner)) continue;

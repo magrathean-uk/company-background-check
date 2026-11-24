@@ -97,7 +97,7 @@ fs.writeFileSync(`${out}/sample-ownership.html`, `${head}<main class="sheet">
     <div class="ownership">
       <h3>Ownership and control evidence</h3>
       <ul class="ownership__list" role="list">
-        ${ownershipRow('Inferred parent', 'Placeholder Groupworks Holdings Ltd',
+        ${ownershipRow('Parent (ownership register)', 'Placeholder Groupworks Holdings Ltd',
           'PSC record for Placeholder Groupworks Trading Ltd: more than 50% of voting rights.', 'ZZ000033/current-pscs', 'Current PSC entry')}
         ${ownershipRow('Non-majority interest', 'Placeholder Groupworks Finance Ltd',
           'PSC record for Placeholder Groupworks Trading Ltd: more than 25% and up to 50% of shares.', 'ZZ000033/current-pscs', 'Current PSC entry', true)}
