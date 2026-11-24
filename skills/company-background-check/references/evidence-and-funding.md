@@ -61,7 +61,7 @@ For new lender security (a charge), open the registration and the attached instr
 
 If the deed is unavailable or unreadable, link the available record and explain why the pledged assets remain unverified. If you inspected the document but could not establish what the relevant clause or schedule covers, state that narrower limit. Use the register for the recorded lender and type of security. Leave the specific assets, loan proceeds and outstanding balance unknown unless the evidence supports them.
 
-Keep the timeline compact. When there are no rows, write "No material events found in the sources checked" under the heading, with the window where known. Use no empty table. If relevant sources could not be checked, name those gaps alongside the result and include material `company.timeline.limits`, inaccessible charge documents and unresolved corrections in section 10. The timeline applies the existing rating and scorecard rules.
+Keep the timeline compact: show at most 10 rows. When more events qualify, keep the ones most likely to change the reader's decision, such as new lender security, owner changes and director departures, and say below the table how many were left out with a link to the filing history. When there are no rows, write "No material events found in the sources checked" under the heading, with the window where known. Use no empty table. If relevant sources could not be checked, name those gaps alongside the result and include material `company.timeline.limits`, inaccessible charge documents and unresolved corrections in section 10. The timeline applies the existing rating and scorecard rules.
 
 ## Validate credibility claims at their actual scope
 

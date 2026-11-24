@@ -244,7 +244,7 @@ Avoid "revaluation reserve", "net current liabilities", "retained profit" and "p
 
 **Material events after the accounts**
 
-State the accounts year-end, then list material events oldest first. Label effective dates, filing dates, publication dates and deadlines. Follow the [timeline guidance](references/evidence-and-funding.md#material-events-after-the-accounts) for missing dates, charge documents and the empty case.
+State the accounts year-end, then list up to 10 material events oldest first. Label effective dates, filing dates, publication dates and deadlines. Follow the [timeline guidance](references/evidence-and-funding.md#material-events-after-the-accounts) for missing dates, charge documents and the empty case.
 
 | Date | Event | Other dates | Evidence |
 |---|---|---|---|

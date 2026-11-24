@@ -14,6 +14,8 @@ const satisfactionFiling = f => f.type === 'MR04' || /^mortgage-satisfy-charge/.
 const filingExtent = value => /satisfy-charge-full/i.test(value || '') ? ' in full' : /satisfy-charge-part/i.test(value || '') ? ' in part' : '';
 const registerExtent = status => /^(?:satisfied|fully-satisfied)$/.test(status || '') ? ' in full' : status === 'part-satisfied' ? ' in part' : '';
 const compatibleExtents = (a, b) => !a || !b || a === b;
+// The filing date and the register's delivered_on can differ by a day around processing cut-offs.
+const withinADay = (a, b) => a && b && Math.abs(Date.parse(a) - Date.parse(b)) <= 86_400_000;
 const replacement = f => /^(RP01|RP04)$/i.test(f.type || '') || /(?:^|-)(?:second|replacement|replaced|corrected)(?:-|$)/i.test(f.description || '');
 
 export function buildTimeline({ accounts, confirmationStatement, number, filings, charges, today = new Date().toISOString().slice(0, 10) }) {
@@ -67,11 +69,11 @@ export function buildTimeline({ accounts, confirmationStatement, number, filings
 
     // Without a link, require a unique pairing by charge, filing date and compatible extent.
     const matches = transactions.filter(t => satisfactionTx(t) && !t.links?.filing
-      && date(t.delivered_on) === filedOn && compatibleExtents(filingExtent(f.description), filingExtent(t.filing_type)));
+      && withinADay(date(t.delivered_on), filedOn) && compatibleExtents(filingExtent(f.description), filingExtent(t.filing_type)));
     if (matches.length !== 1) return null;
     const match = matches[0];
     const competing = items.some(other => other !== f && (!f.transaction_id || other.transaction_id !== f.transaction_id)
-      && satisfactionFiling(other) && date(other.date) === filedOn
+      && satisfactionFiling(other) && withinADay(date(other.date), date(match.delivered_on))
       && !replacement(other) && !removed(other) && compatibleExtents(filingExtent(other.description), filingExtent(match.filing_type))
       && !linked(other) && chargeFor(other) === charge);
     return competing ? null : match;
