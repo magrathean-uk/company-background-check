@@ -14,6 +14,8 @@ An agent skill that runs a background check on a UK company from the point of vi
   <img src=".github/sample-low.png" width="49%" alt="Sample report rated Low: Sunny Badger Software Ltd, a made-up company with growing net assets and nothing adverse on the record">
 </p>
 
+See the [ownership and control evidence panel](.github/sample-ownership.png) for an example with fictional companies.
+
 ## What it checks
 
 - **Companies House:** status, filings, charges, insolvency history, directors and owners

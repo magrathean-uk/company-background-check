@@ -1,6 +1,7 @@
 // Builds the fictional sample reports shown in the README from the report template.
 // node .github/make-samples.mjs skills/company-background-check/references/report-shell.html <out dir>
-// then screenshot each page at 1000 by 1175px and 2x scale, so the two images match in size.
+// Screenshot the high and low reports at 1000 by 1175px and 2x scale.
+// For the ownership sample, capture the .ownership panel on an 860px-wide page.
 import fs from 'node:fs';
 const template = fs.readFileSync(process.argv[2], 'utf8');
 const out = process.argv[3];
@@ -82,3 +83,27 @@ fs.writeFileSync(`${out}/sample-low.html`, page({
     ['info', 'Lender security', '', 'One outstanding charge to a high street bank, created in Mar 2024.', 'Charges'],
   ],
 }));
+
+const ownershipRow = (label, relationship, detail, file, source, other = false) =>
+  `<li${other ? ' class="ownership__other"' : ''}><span class="ownership__kind">${label}</span>
+  <strong class="ownership__relationship">${relationship}</strong>
+  <p class="ownership__detail">${detail} <a href="https://registry.example/${file}">${source}</a></p></li>`;
+
+fs.writeFileSync(`${out}/sample-ownership.html`, `${head}<main class="sheet">
+  <p class="doc-type">Fictional employer check</p>
+  <h1>Placeholder Groupworks Trading Ltd</h1>
+  <section>
+    <h2>Directors and owners</h2>
+    <div class="ownership">
+      <h3>Ownership and control evidence</h3>
+      <ul class="ownership__list" role="list">
+        ${ownershipRow('Inferred parent', 'Placeholder Groupworks Holdings Ltd',
+          'PSC record for Placeholder Groupworks Trading Ltd: more than 50% of voting rights.', 'ZZ000033/current-pscs', 'Current PSC entry')}
+        ${ownershipRow('Non-majority interest', 'Placeholder Groupworks Finance Ltd',
+          'PSC record for Placeholder Groupworks Trading Ltd: more than 25% and up to 50% of shares.', 'ZZ000033/current-pscs', 'Current PSC entry', true)}
+        ${ownershipRow('Former PSC', 'Placeholder Groupworks Services Ltd',
+          'PSC status for Placeholder Groupworks Trading Ltd ceased on 4 April 2023. The current holding is unknown.', 'ZZ000033/psc-history', 'Historical PSC entry', true)}
+      </ul>
+    </div>
+  </section>
+</main></body></html>`);

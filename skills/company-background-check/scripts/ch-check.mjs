@@ -26,7 +26,7 @@ const PARENT_CONTROLS = new Set([
   'voting-rights-50-to-75-percent-limited-liability-partnership', 'voting-rights-75-to-100-percent-limited-liability-partnership',
   'right-to-appoint-and-remove-members-limited-liability-partnership',
 ]);
-const isOrganisationPsc = p => /^(corporate-entity|legal-person)-person-with-significant-control$/.test(p.kind || '');
+const isOrganisationPsc = p => /^(?:corporate-entity-person|legal-person(?:-person)?)-with-significant-control$/.test(p.kind || '');
 const parentControlGap = p => p.ceased_on ? `PSC ceased on ${p.ceased_on}`
   : (p.natures_of_control || []).some(control => PARENT_CONTROLS.has(control)) ? null : 'PSC record does not establish majority control';
 const PPR_BASE = process.env.PPR_BASE || 'https://check-payment-practices.service.gov.uk', PPR_SITE = 'https://check-payment-practices.service.gov.uk';
@@ -485,13 +485,14 @@ for (const f of gazette.flags) flag(f.severity, f.code, f.text, f.url);
 // --- corporate owners: an insolvent parent puts staff at the subsidiary at risk too, so follow owners
 // up to the UK parent and run the register and Gazette checks on each (not the director checks)
 const parents = [], parentsNotFollowed = [], seenInGroup = new Set([number]);
-const parentQueue = [{ items: psc?.items, level: 1, ownerOf: c.company_name }];
+const pscUrl = num => `${SITE}/company/${num}/persons-with-significant-control`;
+const parentQueue = [{ items: psc?.items, level: 1, ownerOf: c.company_name, ownerOfNumber: number }];
 while (parentQueue.length) {
-  const { items, level, ownerOf } = parentQueue.shift();
+  const { items, level, ownerOf, ownerOfNumber } = parentQueue.shift();
   for (const owner of (items || []).filter(isOrganisationPsc)) {
     const ident = owner.identification || {}, register = ident.country_registered || ident.place_registered || ident.legal_authority;
     let parentNumber = companyNumberKey(ident.registration_number), matchedBy;
-    const notFollowed = reason => parentsNotFollowed.push({ name: owner.name, owner_of: ownerOf, reason });
+    const notFollowed = reason => parentsNotFollowed.push({ name: owner.name, owner_of: ownerOf, reason, psc_url: pscUrl(ownerOfNumber) });
     const controlGap = parentControlGap(owner);
     if (controlGap) { notFollowed(controlGap); continue; }
     if (!UK_REGISTER.test(register || '')) { notFollowed(register ? `registered in ${register}` : 'register not stated'); continue; }
@@ -516,9 +517,9 @@ while (parentQueue.length) {
     const parentGazette = await gazetteCheck([parent.company_name, ...(parent.previous_company_names || []).map(x => x.name)], parentNumber);
     const parentFlags = [...registerFlags(parent, parentNumber, parentInsolvency, parentFilings?.items), ...parentGazette.flags];
     for (const f of parentFlags) flag(f.severity, `parent_${f.code}`, `Parent ${parent.company_name}: ${f.text}`, f.url);
-    parents.push({ level, name: parent.company_name, number: parentNumber, ...(matchedBy && { matched_by: matchedBy }), status: parent.company_status, owner_of: ownerOf, control: owner.natures_of_control || [],
+    parents.push({ level, name: parent.company_name, number: parentNumber, ...(matchedBy && { matched_by: matchedBy }), status: parent.company_status, owner_of: ownerOf, psc_url: pscUrl(ownerOfNumber), control: owner.natures_of_control || [],
       flags: parentFlags.map(f => f.code), gazette_name_only: parentGazette.name_only, url: `${SITE}/company/${parentNumber}` });
-    parentQueue.push({ items: parentPsc?.items, level: level + 1, ownerOf: parent.company_name });
+    parentQueue.push({ items: parentPsc?.items, level: level + 1, ownerOf: parent.company_name, ownerOfNumber: parentNumber });
   }
 }
 
@@ -636,7 +637,14 @@ async function inTargetGroup(num, depth = 0) {
     if (!owner.name || !isOrganisationPsc(owner)) continue;
     const controlGap = parentControlGap(owner);
     if (controlGap) {
-      groupOwnershipNotFollowed.set(`${num}:${owner.name}:${controlGap}`, { name: owner.name, owner_of: num, reason: controlGap });
+      groupOwnershipNotFollowed.set(`${num}:${owner.name}:${controlGap}`, { name: owner.name, owner_of: num, reason: controlGap, psc_url: pscUrl(num) });
+      continue;
+    }
+    // An explicit foreign register cannot identify a UK company, even if its number or name matches.
+    const register = owner.identification?.country_registered || owner.identification?.place_registered;
+    if (register && !UK_REGISTER.test(register)) {
+      const reason = `registered in ${register}`;
+      groupOwnershipNotFollowed.set(`${num}:${owner.name}:${reason}`, { name: owner.name, owner_of: num, reason, psc_url: pscUrl(num) });
       continue;
     }
     // Subsidiaries often record their owner by name only, and that owner may be dissolved by now too
@@ -805,7 +813,7 @@ for (const linked of failedToSearch.slice(0, MAX_FAILED_COMPANY_TRIBUNAL_SEARCHE
   }
 }
 
-const pscs = (psc?.items || []).filter(p => !p.ceased_on).map(p => ({ name: p.name, kind: (p.kind || '').replace(/-person-with-significant-control$/, ''), control: p.natures_of_control || [] }));
+const pscs = (psc?.items || []).filter(p => !p.ceased_on).map(p => ({ name: p.name, kind: p.kind === 'legal-person-with-significant-control' ? 'legal-person' : (p.kind || '').replace(/-person-with-significant-control$/, ''), control: p.natures_of_control || [] }));
 if (!pscs.length) flag('info', 'no_psc', 'No active person with significant control on record', `${SITE}/company/${number}/persons-with-significant-control`);
 
 const order = { high: 0, medium: 1, low: 2, info: 3 };

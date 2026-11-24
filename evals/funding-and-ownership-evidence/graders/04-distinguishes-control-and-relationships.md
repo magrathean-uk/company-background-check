@@ -11,3 +11,6 @@ treat the fundraising adviser as an investor or parent merely because it uses â€
 It identifies the basis and uncertainty of these relationships and leaves exact current
 ownership subject to the shareholder register or cap table. The statement of Ms Phi Example's
 90% is attributed, not presented as an exact percentage proved by the PSC band.
+
+The ownership and control evidence block gives the archived PSC record and the recent company
+statement their own labelled, source-linked rows. It shows no current parent link for either.

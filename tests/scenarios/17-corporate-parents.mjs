@@ -17,7 +17,7 @@ export default {
       'flags.0.text': 'Parent PLACEHOLDER MIDCO LTD: Accounts overdue (were due 2026-01-31)',
       'company.parents.length': 3,
       'company.parents.0': {
-        level: 1, name: 'PLACEHOLDER MIDCO LTD', number: 'ZZ000171', status: 'active', owner_of: 'PLACEHOLDER SUBSIDIARY LTD',
+        level: 1, name: 'PLACEHOLDER MIDCO LTD', number: 'ZZ000171', status: 'active', owner_of: 'PLACEHOLDER SUBSIDIARY LTD', psc_url: 'https://find-and-update.company-information.service.gov.uk/company/ZZ000017/persons-with-significant-control',
         control: ['ownership-of-shares-75-to-100-percent'], flags: ['accounts_overdue'], gazette_name_only: [],
         url: 'https://find-and-update.company-information.service.gov.uk/company/ZZ000171',
       },
@@ -25,9 +25,9 @@ export default {
       'company.parents.1.owner_of': 'PLACEHOLDER MIDCO LTD',
       'company.parents.2.level': 3,
       'meta.parents_not_followed': [
-        { name: 'Placeholder Former Owner Limited', owner_of: 'PLACEHOLDER SUBSIDIARY LTD', reason: 'PSC ceased on 2020-01-01' },
-        { name: 'Placeholder Overseas BV', owner_of: 'PLACEHOLDER MIDCO LTD', reason: 'registered in Netherlands' },
-        { name: 'Placeholder Beyond Limited', owner_of: 'PLACEHOLDER ULTIMATE LTD', reason: 'more than 3 levels up' },
+        { name: 'Placeholder Former Owner Limited', owner_of: 'PLACEHOLDER SUBSIDIARY LTD', reason: 'PSC ceased on 2020-01-01', psc_url: 'https://find-and-update.company-information.service.gov.uk/company/ZZ000017/persons-with-significant-control' },
+        { name: 'Placeholder Overseas BV', owner_of: 'PLACEHOLDER MIDCO LTD', reason: 'registered in Netherlands', psc_url: 'https://find-and-update.company-information.service.gov.uk/company/ZZ000171/persons-with-significant-control' },
+        { name: 'Placeholder Beyond Limited', owner_of: 'PLACEHOLDER ULTIMATE LTD', reason: 'more than 3 levels up', psc_url: 'https://find-and-update.company-information.service.gov.uk/company/ZZ000173/persons-with-significant-control' },
       ],
     },
   },
@@ -41,7 +41,7 @@ export default {
     }),
     '/officers/OFF-ALPHA2/appointments': list(appointment('ZZ000017', 'PLACEHOLDER SUBSIDIARY LTD')),
     ...companyRoutes(midco, {
-      pscs: [corporatePsc('Placeholder Topco Plc', 'ZZ000172', 'England and Wales'), corporatePsc('Placeholder Overseas BV', 'NL12345678', 'Netherlands')],
+      pscs: [corporatePsc('Placeholder Topco Plc', 'ZZ000172', 'England and Wales'), corporatePsc('Placeholder Overseas BV', 'ZZ000172', 'Netherlands', { identification: { registration_number: 'ZZ000172', country_registered: 'Netherlands', legal_authority: 'Companies House' } })],
     }),
     ...companyRoutes(topco, {
       pscs: [corporatePsc('Placeholder Ultimate Limited', 'ZZ000173', 'United Kingdom')],

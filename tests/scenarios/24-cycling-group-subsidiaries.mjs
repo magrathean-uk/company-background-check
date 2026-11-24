@@ -18,6 +18,8 @@ export default {
       'directors.0.related_companies.0.group_member': true,
       'directors.0.related_companies.1.group_member': true,
       'directors.0.related_companies.2.group_member': false,
+      'directors.0.related_companies.3.group_member': false,
+      'meta.group_ownership_not_followed.0.psc_url': 'https://find-and-update.company-information.service.gov.uk/company/ZZ100243/persons-with-significant-control',
     },
   },
   routes: {
@@ -37,11 +39,13 @@ export default {
     '/company/ZZ100243': closed('ZZ100243', 'PLACEHOLDER GROUPWORKS TRADING LTD', '2018-01-01', '2020-03-01'),
     '/company/ZZ100244': closed('ZZ100244', 'PLACEHOLDER GROUPWORKS SERVICES LTD', '2019-01-01', '2024-03-01'),
     ...owners('ZZ100241', corporatePsc('Placeholder Groupworks plc', 'ZZ000024', 'England')),
-    ...owners('ZZ100242', { kind: 'legal-person-person-with-significant-control', name: 'Placeholder Groupworks Lending Limited', identification: { legal_form: 'Limited Company', legal_authority: 'Companies Act' }, natures_of_control: ['voting-rights-75-to-100-percent'] }),
+    ...owners('ZZ100242', { kind: 'legal-person-with-significant-control', name: 'Placeholder Groupworks Lending Limited', identification: { legal_form: 'Limited Company', legal_authority: 'Companies Act' }, natures_of_control: ['voting-rights-75-to-100-percent'] }),
     '/search/companies?q=Placeholder Groupworks Lending Limited': {
       items: [{ company_number: 'ZZ100245', title: 'PLACEHOLDER GROUPWORKS LENDING LTD', company_status: 'dissolved', address: office('ZZ24 4AA') }],
     },
     ...owners('ZZ100245', corporatePsc('Placeholder Groupworks plc', 'ZZ000024', 'England')),
-    ...owners('ZZ100243', individualPsc('Mr Psi Sample', { month: 1, year: 1960 })),
+    ...owners('ZZ100243', corporatePsc('Placeholder Groupworks plc', 'ZZ000024', 'Netherlands', { identification: { registration_number: 'ZZ000024', country_registered: 'Netherlands', legal_authority: 'Companies House' } })),
+    ...owners('ZZ100244', corporatePsc('Placeholder Groupworks plc', undefined, 'Netherlands')),
+    '/search/companies?q=Placeholder Groupworks plc': { items: [{ company_number: target.company_number, title: target.company_name, company_status: 'active' }] },
   },
 };

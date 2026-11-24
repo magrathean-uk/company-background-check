@@ -80,6 +80,16 @@
   .num { text-align: right; font-variant-numeric: tabular-nums; }
   .evidence { width: 11em; }
   .subhead { margin: 26px 0 6px; font-size: 1rem; font-weight: 650; }
+  .ownership { margin: 18px 0; border: 1px solid var(--rule); border-radius: 6px; }
+  .ownership h3 { margin: 0; padding: 10px 16px; border-bottom: 1px solid var(--rule); font-size: 1rem; }
+  .ownership__list { margin: 0; padding: 0; list-style: none; }
+  .ownership__list li { padding: 12px 16px; overflow-wrap: anywhere; }
+  .ownership__list li + li { border-top: 1px solid var(--rule); }
+  .ownership__kind { display: block; color: #1d4f91; font-size: .8rem; font-weight: 650; }
+  .ownership__relationship { display: block; margin: 2px 0; font-weight: 650; }
+  .ownership__detail { margin: 0; color: var(--muted); font-size: .9rem; }
+  .ownership__other { background: #f7f8fa; }
+  .ownership__other .ownership__kind { color: var(--muted); }
   .callout { margin: 16px 0 0; padding: 14px 18px; border-left: 6px solid var(--high); background: var(--high-tint); }
   .callout h3 { margin: 0 0 4px; font-size: 1rem; }
   .callout ul { margin: 6px 0 8px; padding-left: 1.2em; }
@@ -122,7 +132,8 @@
     .sheet { max-width: none; margin: 0; padding: 0; box-shadow: none; }
     h1 { font-size: 26pt; }
     h2 { margin-top: 18pt; break-after: avoid; }
-    tr, .area, .verdict, .callout, .plain-list li { break-inside: avoid; }
+    .ownership h3 { break-after: avoid; }
+    tr, .area, .verdict, .callout, .plain-list li, .ownership__list li { break-inside: avoid; }
     thead { display: table-header-group; }
     .table-wrap { overflow: visible; }
     a { color: inherit; }
@@ -196,7 +207,7 @@
     <h3 class="subhead">Financials</h3>
     <div class="table-wrap"><table>
       <thead><tr><th>Year end</th><th class="num">Net assets</th><th class="num">Net current assets</th><th class="num">Cash</th><th class="num">Payroll cover</th><th class="num">Avg employees</th><th class="num">Turnover</th><th>Format</th></tr></thead>
-      <!-- Newest first, up to three years. "n/a" where a figure was not tagged or stated. Payroll cover is months of staff costs the cash would pay. Format: iXBRL, PDF (read by hand) or Unavailable. -->
+      <!-- Newest first, up to five years. "n/a" where a figure was not tagged or stated. Payroll cover is months of staff costs the cash would pay. Format: iXBRL, PDF (read by hand), PDF (indexed text), PDF (not read) or Unavailable. -->
       <tbody><tr><td class="nowrap">{D Mon YYYY}</td><td class="nowrap num">{£}</td><td class="nowrap num">{£}</td><td class="nowrap num">{£}</td><td class="nowrap num">{n} months</td><td class="nowrap num">{n}</td><td class="nowrap num">{£}</td><td>{Format}</td></tr></tbody>
     </table></div>
     <!-- One short note per point for the latest year: net assets, net current assets, figures not shown. Wording in SKILL.md under Financials. -->
@@ -211,7 +222,17 @@
       <tbody><tr><td class="nowrap">{Name}<br><span class="muted">{Role}</span></td><td class="nowrap">{D Mon YYYY}</td><td class="nowrap">{n} ({n} closed, {n} insolvent)</td><td>{One or two short sentences}</td></tr></tbody>
     </table></div>
     <p class="note"><strong>Owners (PSCs):</strong> {names and level of control}</p>
-    <p class="note"><strong>Group:</strong> {UK parents in order up the chain, each with its status and any finding, or "No corporate owner". Owners not followed and why.}</p>
+    <p class="note"><strong>Group:</strong> {inferred or independently confirmed UK parents in order up the chain, each with its control basis, status and any finding, or "No current corporate parent identified in the records checked". Owners not followed and why.}</p>
+    <!-- Include only when there is a sourced corporate ownership or control relationship to show. Repeat one item per evidenced relationship; omit either item type when absent. Never connect entities by placement alone. -->
+    <div class="ownership">
+      <h3>Ownership and control evidence</h3>
+      <ul class="ownership__list" role="list">
+        <!-- Current parent: identify both entities and the supported basis, date and source for this specific link. Label inferred control as inferred. -->
+        <li><span class="ownership__kind">{Inferred parent|Independently confirmed parent}</span><strong class="ownership__relationship">{Parent name} is the {inferred|confirmed} parent of {Company name}</strong><p class="ownership__detail">{Control basis and relevant date or period}. <a href="{url}">{Source}</a></p></li>
+        <!-- Minority, former and uncertain relationships are separate evidence, not parent links. State exactly what the source supports and its date. -->
+        <li class="ownership__other"><span class="ownership__kind">{Non-majority interest|Former PSC|Former parent|Unverified relationship}</span><strong class="ownership__relationship">{Entity names and relationship as evidenced}</strong><p class="ownership__detail">{Basis, relevant date or period, and uncertainty}. <a href="{url}">{Source}</a></p></li>
+      </ul>
+    </div>
     <!-- Only when a phoenix or cycling pattern was found. Otherwise leave the whole block out. -->
     <div class="callout">
       <h3>Phoenix check: {possible|strong|serial}</h3>

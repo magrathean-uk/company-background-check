@@ -3,7 +3,7 @@ import { appointment, company, companyRoutes, corporatePsc, director, list } fro
 // Reuse existing fictional fixture names; company numbers are deliberately unissued ZZ numbers.
 const target = company('ZZ000031', 'PLACEHOLDER OPCO LTD');
 const psc = (name, number, control, extra = {}) => corporatePsc(name, number, 'England', { natures_of_control: control, ...extra });
-const unresolved = name => ({ name, owner_of: target.company_name, reason: 'PSC record does not establish majority control' });
+const unresolved = name => ({ name, owner_of: target.company_name, reason: 'PSC record does not establish majority control', psc_url: 'https://find-and-update.company-information.service.gov.uk/company/ZZ000031/persons-with-significant-control' });
 
 export default {
   description: 'Minority, influence-only, trust, missing-control and ceased corporate PSCs do not become parents or import their financial flags',
@@ -21,7 +21,7 @@ export default {
         unresolved('Placeholder Topco Plc'),
         unresolved('Placeholder Ultimate Limited'),
         unresolved('Placeholder Midco Limited'),
-        { name: 'Placeholder Former Owner Limited', owner_of: target.company_name, reason: 'PSC ceased on 2024-12-17' },
+        { name: 'Placeholder Former Owner Limited', owner_of: target.company_name, reason: 'PSC ceased on 2024-12-17', psc_url: 'https://find-and-update.company-information.service.gov.uk/company/ZZ000031/persons-with-significant-control' },
       ],
     },
   },
